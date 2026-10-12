@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Chat, User, Contact, ChatMember } from '../types/telegram';
 import { 
   Users, 
@@ -12,8 +12,16 @@ import {
   Radio, 
   ShieldCheck,
   Search,
-  UserPlus
+  UserPlus,
+  Loader2,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
+import { 
+  checkLocalUsernameAvailable, 
+  checkUsernameAvailability, 
+  validateUsernameFormat 
+} from '../utils/apiSync';
 
 interface CreateChatModalProps {
   isOpen: boolean;
@@ -21,6 +29,7 @@ interface CreateChatModalProps {
   onCreateChat: (chat: Chat) => void;
   contactsList: Contact[];
   usersList: User[];
+  existingChats?: Chat[];
   currentUser: User;
 }
 
@@ -44,6 +53,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   onCreateChat,
   contactsList,
   usersList,
+  existingChats = [],
   currentUser
 }) => {
   const [chatType, setChatType] = useState<'group' | 'channel'>('group');
@@ -56,7 +66,41 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   const [memberSearch, setMemberSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const [usernameStatus, setUsernameStatus] = useState<{
+    checking: boolean;
+    available?: boolean;
+    error?: string;
+    message?: string;
+  }>({ checking: false });
+
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // استعلام و بررسی یکتایی آیدی کانال به صورت بلادرنگ
+  useEffect(() => {
+    if (chatType !== 'channel' || !channelUsername.trim()) {
+      setUsernameStatus({ checking: false });
+      return;
+    }
+
+    const clean = channelUsername.trim().replace(/^@+/, '').toLowerCase();
+    const localCheck = checkLocalUsernameAvailable(clean, usersList, existingChats);
+    if (!localCheck.available) {
+      setUsernameStatus({ checking: false, available: false, error: localCheck.error });
+      return;
+    }
+
+    setUsernameStatus({ checking: true });
+    const timer = setTimeout(async () => {
+      const remote = await checkUsernameAvailability(clean);
+      if (!remote.available) {
+        setUsernameStatus({ checking: false, available: false, error: remote.error || remote.message });
+      } else {
+        setUsernameStatus({ checking: false, available: true, message: `شناسه @${clean} اختصاصی و آزاد است.` });
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [channelUsername, chatType, usersList, existingChats]);
 
   if (!isOpen) return null;
 
@@ -86,6 +130,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     setChatType(type);
     setSelectedAvatar(type === 'group' ? DEFAULT_GROUP_AVATARS[0] : DEFAULT_CHANNEL_AVATARS[0]);
     setError(null);
+    setUsernameStatus({ checking: false });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -99,9 +144,21 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     }
 
     if (chatType === 'channel' && channelUsername.trim()) {
-      const cleanUsername = channelUsername.trim().replace('@', '');
-      if (cleanUsername.length < 3) {
-        setError('شناسه کانال باید حداقل ۳ حرف باشد.');
+      const cleanUsername = channelUsername.trim().replace(/^@+/, '').toLowerCase();
+      const formatCheck = validateUsernameFormat(cleanUsername);
+      if (!formatCheck.valid) {
+        setError(formatCheck.error || 'فرمت شناسه کانال نامعتبر است.');
+        return;
+      }
+
+      const localCheck = checkLocalUsernameAvailable(cleanUsername, usersList, existingChats);
+      if (!localCheck.available) {
+        setError(localCheck.error || 'این شناسه کانال قبلاً ثبت شده و تکراری است.');
+        return;
+      }
+
+      if (usernameStatus.available === false) {
+        setError(usernameStatus.error || 'این شناسه کانال تکراری است و به کاربر یا کانال دیگری تعلق دارد.');
         return;
       }
     }
@@ -326,11 +383,41 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
           {/* Channel Username (Only for Channel) */}
           {chatType === 'channel' && (
             <div className="space-y-1.5">
-              <label className="text-xs font-bold text-slate-300">
-                شناسه عمومی کانال (Username / Link):
-              </label>
-              <div className="flex items-center bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 focus-within:border-amber-400">
-                <span className="text-amber-400 text-xs ml-1 font-mono">@</span>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-300">
+                  شناسه اختصاصی و عمومی کانال (Username / Link):
+                </label>
+                {channelUsername.trim() && (
+                  <span className="text-[11px] flex items-center gap-1 font-sans">
+                    {usernameStatus.checking ? (
+                      <span className="text-amber-400 flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>بررسی اختصاصی بودن...</span>
+                      </span>
+                    ) : usernameStatus.available ? (
+                      <span className="text-emerald-400 flex items-center gap-1 font-bold">
+                        <CheckCircle2 className="w-3 h-3" />
+                        <span>آزاد و اختصاصی</span>
+                      </span>
+                    ) : usernameStatus.error ? (
+                      <span className="text-rose-400 flex items-center gap-1 font-bold">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>تکراری / غیرمجاز</span>
+                      </span>
+                    ) : null}
+                  </span>
+                )}
+              </div>
+              <div className={`flex items-center bg-slate-900 border rounded-xl px-3.5 py-2 transition-colors ${
+                channelUsername.trim()
+                  ? usernameStatus.available
+                    ? 'border-emerald-500/80 focus-within:border-emerald-400'
+                    : usernameStatus.error
+                    ? 'border-rose-500/80 focus-within:border-rose-400'
+                    : 'border-slate-700 focus-within:border-amber-400'
+                  : 'border-slate-700 focus-within:border-amber-400'
+              }`}>
+                <span className="text-amber-400 text-xs ml-1 font-mono font-bold">@</span>
                 <input
                   type="text"
                   placeholder="godfather_channel"
@@ -340,8 +427,24 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                   className="w-full bg-transparent text-xs text-white outline-none font-mono text-left"
                 />
               </div>
+
+              {/* Status message or error explanation */}
+              {channelUsername.trim() && usernameStatus.error && (
+                <p className="text-[11px] text-rose-400 flex items-center gap-1 mt-1 font-medium bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                  <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{usernameStatus.error}</span>
+                </p>
+              )}
+
+              {channelUsername.trim() && usernameStatus.available && (
+                <p className="text-[11px] text-emerald-400 flex items-center gap-1 mt-1 font-medium bg-emerald-500/10 p-1.5 rounded-lg border border-emerald-500/20">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>این شناسه کاملاً اختصاصی است و هیچ کانال یا کاربری از آن استفاده نمی‌کند.</span>
+                </p>
+              )}
+
               <p className="text-[10px] text-slate-500">
-                لینک عمومی کانال: t.me/{channelUsername ? channelUsername.replace('@', '') : 'username'}
+                لینک عمومی کانال: <span className="font-mono text-cyan-400">t.me/{channelUsername ? channelUsername.replace(/^@+/, '') : 'username'}</span>
               </p>
             </div>
           )}

@@ -46,9 +46,20 @@ import {
   Database,
   Download,
   RefreshCw,
-  Server
+  Server,
+  Loader2
 } from 'lucide-react';
-import { checkApiHealth, getApiBaseUrl, setApiBaseUrl, ApiStatusResponse } from '../utils/apiSync';
+import { 
+  checkApiHealth, 
+  getApiBaseUrl, 
+  setApiBaseUrl, 
+  ApiStatusResponse,
+  checkLocalUsernameAvailable,
+  checkUsernameAvailability,
+  validateUsernameFormat,
+  updateUserOnRemote
+} from '../utils/apiSync';
+import { Chat } from '../types/telegram';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -56,6 +67,8 @@ interface SettingsModalProps {
   currentUser: User;
   onUpdateUser: (updated: Partial<User>) => void;
   folders?: ChatFolder[];
+  usersList?: User[];
+  chats?: Chat[];
   onOpenAuth?: () => void;
   onOpenAdminPanel?: () => void;
   initialSection?: SettingsSection;
@@ -96,6 +109,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   currentUser,
   onUpdateUser,
   folders = [],
+  usersList = [],
+  chats = [],
   onOpenAuth,
   onOpenAdminPanel,
   initialSection = 'main',
@@ -135,6 +150,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [bioInput, setBioInput] = useState(currentUser.bio || '');
   const [avatarPreview, setAvatarPreview] = useState(currentUser.avatar);
   const [profileSuccessMsg, setProfileSuccessMsg] = useState(false);
+  const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  const [usernameStatus, setUsernameStatus] = useState<{
+    checking: boolean;
+    available?: boolean;
+    error?: string;
+    message?: string;
+  }>({ checking: false });
+
+  // استعلام و بررسی اختصاصی بودن نام کاربری به صورت بلادرنگ
+  React.useEffect(() => {
+    if (!isOpen || currentSection !== 'edit_profile') {
+      setUsernameStatus({ checking: false });
+      return;
+    }
+
+    const clean = usernameInput.trim().replace(/^@+/, '').toLowerCase();
+    const currentClean = (currentUser.username || '').trim().replace(/^@+/, '').toLowerCase();
+
+    // اگر نام کاربری دست نخورده است، معتبر است
+    if (!clean || clean === currentClean) {
+      setUsernameStatus({ checking: false, available: true, message: 'نام کاربری فعلی شما' });
+      setProfileErrorMsg(null);
+      return;
+    }
+
+    const localCheck = checkLocalUsernameAvailable(clean, usersList, chats, currentUser.id);
+    if (!localCheck.available) {
+      setUsernameStatus({ checking: false, available: false, error: localCheck.error });
+      return;
+    }
+
+    setUsernameStatus({ checking: true });
+    const timer = setTimeout(async () => {
+      const remote = await checkUsernameAvailability(clean, currentUser.id);
+      if (!remote.available) {
+        setUsernameStatus({ checking: false, available: false, error: remote.error || remote.message });
+      } else {
+        setUsernameStatus({ checking: false, available: true, message: `شناسه @${clean} آزاد و قابل ثبت است.` });
+        setProfileErrorMsg(null);
+      }
+    }, 350);
+
+    return () => clearTimeout(timer);
+  }, [usernameInput, currentSection, isOpen, currentUser, usersList, chats]);
 
   // Chat Settings state
   const [fontSize, setFontSize] = useState(15);
@@ -274,14 +335,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateUser({
+    setProfileErrorMsg(null);
+
+    const cleanUsername = usernameInput.trim().replace(/^@+/, '').toLowerCase();
+    const currentClean = (currentUser.username || '').trim().replace(/^@+/, '').toLowerCase();
+
+    // اعتبارسنجی در صورت تغییر نام کاربری
+    if (cleanUsername && cleanUsername !== currentClean) {
+      const formatCheck = validateUsernameFormat(cleanUsername);
+      if (!formatCheck.valid) {
+        setProfileErrorMsg(formatCheck.error || 'فرمت نام کاربری نامعتبر است.');
+        return;
+      }
+
+      const localCheck = checkLocalUsernameAvailable(cleanUsername, usersList, chats, currentUser.id);
+      if (!localCheck.available) {
+        setProfileErrorMsg(localCheck.error || 'این نام کاربری قبلاً استفاده شده و تکراری است.');
+        return;
+      }
+
+      if (usernameStatus.available === false) {
+        setProfileErrorMsg(usernameStatus.error || 'این نام کاربری در دسترس نیست و به فرد دیگری تعلق دارد.');
+        return;
+      }
+    }
+
+    setIsSavingProfile(true);
+
+    const updatedUserObj = {
       name: nameInput.trim() || currentUser.name,
-      username: usernameInput.trim().replace('@', '') || currentUser.username,
+      username: cleanUsername || currentUser.username,
       bio: bioInput.trim(),
       avatar: avatarPreview
+    };
+
+    // ذخیره در سرور دیتابیس MySQL / Express
+    await updateUserOnRemote({
+      id: currentUser.id,
+      ...updatedUserObj
     });
+
+    setIsSavingProfile(false);
+
+    onUpdateUser(updatedUserObj);
     setProfileSuccessMsg(true);
     setTimeout(() => {
       setProfileSuccessMsg(false);
@@ -718,11 +816,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              {/* Username */}
+              {/* Username with Uniqueness Feedback */}
               <div className="space-y-1.5">
-                <label className="text-xs text-slate-300 font-medium">نام کاربری (Username):</label>
-                <div className="flex items-center bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 focus-within:border-cyan-400">
-                  <span className="text-slate-400 text-sm ml-1 font-mono">@</span>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs text-slate-300 font-medium">نام کاربری اختصاصی (Username):</label>
+                  {usernameInput.trim() && (
+                    <span className="text-[11px] flex items-center gap-1 font-sans">
+                      {usernameStatus.checking ? (
+                        <span className="text-amber-400 flex items-center gap-1">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span>بررسی اختصاصی بودن...</span>
+                        </span>
+                      ) : usernameStatus.available ? (
+                        <span className="text-emerald-400 flex items-center gap-1 font-bold">
+                          <CheckCircle2 className="w-3 h-3" />
+                          <span>{usernameStatus.message || 'آزاد و اختصاصی'}</span>
+                        </span>
+                      ) : usernameStatus.error ? (
+                        <span className="text-rose-400 flex items-center gap-1 font-bold">
+                          <AlertCircle className="w-3 h-3" />
+                          <span>تکراری / غیرمجاز</span>
+                        </span>
+                      ) : null}
+                    </span>
+                  )}
+                </div>
+
+                <div className={`flex items-center bg-slate-900 border rounded-xl px-3 py-2 transition-colors ${
+                  usernameInput.trim().toLowerCase() !== (currentUser.username || '').toLowerCase()
+                    ? usernameStatus.available
+                      ? 'border-emerald-500/80 focus-within:border-emerald-400'
+                      : usernameStatus.error
+                      ? 'border-rose-500/80 focus-within:border-rose-400'
+                      : 'border-slate-700 focus-within:border-cyan-400'
+                    : 'border-slate-700 focus-within:border-cyan-400'
+                }`}>
+                  <span className="text-slate-400 text-sm ml-1 font-mono font-bold">@</span>
                   <input
                     type="text"
                     value={usernameInput}
@@ -732,8 +861,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     required
                   />
                 </div>
+
+                {/* Real-time error alert */}
+                {usernameInput.trim().toLowerCase() !== (currentUser.username || '').toLowerCase() && usernameStatus.error && (
+                  <p className="text-[11px] text-rose-400 flex items-center gap-1 mt-1 font-medium bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{usernameStatus.error}</span>
+                  </p>
+                )}
+
+                {/* Profile submit error message */}
+                {profileErrorMsg && (
+                  <p className="text-[11px] text-rose-400 flex items-center gap-1 mt-1 font-medium bg-rose-500/10 p-2 rounded-lg border border-rose-500/20">
+                    <AlertCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span>{profileErrorMsg}</span>
+                  </p>
+                )}
+
                 <p className="text-[11px] text-slate-400">
-                  لینک مستقیم شما: <span className="text-cyan-400 font-mono">t.me/{usernameInput || 'username'}</span>
+                  لینک مستقیم شما: <span className="text-cyan-400 font-mono">t.me/{usernameInput ? usernameInput.replace(/^@+/, '') : 'username'}</span>
                 </p>
               </div>
 
@@ -761,9 +907,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <button
                 type="submit"
-                className="w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm rounded-xl transition-all cursor-pointer shadow-md mt-2"
+                disabled={isSavingProfile || usernameStatus.available === false}
+                className={`w-full py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-sm rounded-xl transition-all shadow-md mt-2 flex items-center justify-center gap-2 ${
+                  isSavingProfile || usernameStatus.available === false ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer'
+                }`}
               >
-                ذخیره تغییرات پروفایل
+                {isSavingProfile ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>در حال ذخیره و ثبت تغییرات...</span>
+                  </>
+                ) : (
+                  <span>ذخیره تغییرات پروفایل</span>
+                )}
               </button>
             </form>
           )}

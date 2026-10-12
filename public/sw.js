@@ -35,7 +35,19 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
-  if (url.pathname.startsWith('/api') || url.pathname.includes('api.php') || url.pathname.startsWith('/socket')) {
+  // Skip API, WebSocket, Vite hot-reload, source files, and development assets
+  if (
+    url.pathname.startsWith('/api') || 
+    url.pathname.includes('api.php') || 
+    url.pathname.startsWith('/socket') ||
+    url.pathname.startsWith('/@') ||
+    url.pathname.startsWith('/src') ||
+    url.pathname.startsWith('/node_modules') ||
+    url.search.includes('v=') ||
+    url.hostname.includes('run.app') ||
+    url.hostname === 'localhost' ||
+    url.hostname === '127.0.0.1'
+  ) {
     return;
   }
 

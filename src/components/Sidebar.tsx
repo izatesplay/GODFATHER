@@ -29,7 +29,9 @@ import {
   UserX,
   Share2,
   Smartphone,
-  Megaphone
+  Megaphone,
+  X,
+  MessageSquare
 } from 'lucide-react';
 import { INITIAL_CONTACTS } from '../data/mock-chats';
 import { checkPhoneInDatabase, normalizePhoneNumber, saveContactToRemote } from '../utils/apiSync';
@@ -108,23 +110,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const contactFileInputRef = useRef<HTMLInputElement>(null);
 
-  const isSuperAdmin = currentUser.phone === '09921758505' || currentUser.role === 'superadmin' || currentUser.username === 'izatesplay' || currentUser.username === 'admin';
+  const isSuperAdmin = currentUser?.phone === '09921758505' || currentUser?.role === 'superadmin' || currentUser?.username === 'izatesplay' || currentUser?.username === 'admin';
+
+  const safeChats = chats || [];
 
   // Dynamic folder tabs based on actual real chats
   const folderTabs: FolderTabItem[] = [
-    { id: 'all', name: 'All', count: chats.length },
-    { id: 'channels', name: 'channel', count: chats.filter((c) => c.type === 'channel').length },
-    { id: 'personal', name: 'pv', count: chats.filter((c) => c.type === 'private' || c.type === 'secret').length },
-    { id: 'groups', name: 'group', count: chats.filter((c) => c.type === 'group' || c.type === 'supergroup').length },
-    { id: 'bots', name: 'bots', count: chats.filter((c) => c.type === 'bot').length }
+    { id: 'all', name: 'All', count: safeChats.length },
+    { id: 'channels', name: 'channel', count: safeChats.filter((c) => c?.type === 'channel').length },
+    { id: 'personal', name: 'pv', count: safeChats.filter((c) => c?.type === 'private' || c?.type === 'secret').length },
+    { id: 'groups', name: 'group', count: safeChats.filter((c) => c?.type === 'group' || c?.type === 'supergroup').length },
+    { id: 'bots', name: 'bots', count: safeChats.filter((c) => c?.type === 'bot').length }
   ];
 
   // Filter chats by folder and search query
-  const filteredChats = chats.filter((chat) => {
+  const filteredChats = safeChats.filter((chat) => {
+    if (!chat) return false;
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
-      const matchTitle = chat.title.toLowerCase().includes(q);
-      const matchMsg = chat.lastMessage?.text.toLowerCase().includes(q);
+      const matchTitle = (chat.title || '').toLowerCase().includes(q);
+      const matchMsg = (chat.lastMessage?.text || '').toLowerCase().includes(q);
       if (!matchTitle && !matchMsg) return false;
     }
 
@@ -137,11 +142,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   });
 
   // Filter contacts by search
-  const filteredContacts = contactsList.filter((c) =>
-    c.name.toLowerCase().includes(contactsSearch.toLowerCase()) ||
-    c.phone.includes(contactsSearch) ||
-    (c.username && c.username.toLowerCase().includes(contactsSearch.toLowerCase()))
-  );
+  const safeContactsList = contactsList || [];
+  const filteredContacts = safeContactsList.filter((c) => {
+    if (!c) return false;
+    const nameMatch = (c.name || '').toLowerCase().includes(contactsSearch.toLowerCase());
+    const phoneMatch = (c.phone || '').includes(contactsSearch);
+    const usernameMatch = Boolean(c.username && c.username.toLowerCase().includes(contactsSearch.toLowerCase()));
+    return nameMatch || phoneMatch || usernameMatch;
+  });
 
   const handleContactAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -451,6 +459,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
             }}
             className="w-full bg-transparent text-xs text-white placeholder-slate-400 outline-none"
           />
+          {((activeBottomNav === 'contacts' && contactsSearch) || (activeBottomNav !== 'contacts' && searchQuery)) && (
+            <button
+              onClick={() => {
+                if (activeBottomNav === 'contacts') {
+                  setContactsSearch('');
+                } else {
+                  onSearchChange('');
+                }
+              }}
+              className="p-0.5 text-slate-400 hover:text-white rounded-full transition-colors cursor-pointer mr-1"
+              title="پاک کردن جستجو"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* Folder Pills with Badge Counts (Only shown on Chats tab) */}
@@ -1024,6 +1047,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         }}
         contactsList={contactsList}
         usersList={usersList || []}
+        existingChats={chats}
         currentUser={currentUser}
       />
 

@@ -199,10 +199,10 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
   };
 
   const copyInviteLink = () => {
-    const link = `https://t.me/+godfather_${chat.id}`;
+    const link = chat.username ? `https://t.me/${chat.username}` : `https://t.me/+godfather_${chat.id}`;
     navigator.clipboard?.writeText?.(link);
     setCopiedLink(true);
-    showToast('لینک اختصاصی دعوت کپی شد!');
+    showToast(chat.username ? 'لینک عمومی تلگرام کپی شد!' : 'لینک اختصاصی دعوت کپی شد!');
     setTimeout(() => setCopiedLink(false), 2000);
   };
 
@@ -384,15 +384,25 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
               </p>
             )}
 
+            {/* Channel / Group Unique Public Username */}
+            {chat.username && (
+              <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between text-xs">
+                <div className="text-slate-400 text-[11px] font-bold">شناسه اختصاصی (ID):</div>
+                <div className="flex items-center gap-1.5 text-amber-400 font-mono text-[11px] bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-700/60" dir="ltr">
+                  <span>@{chat.username}</span>
+                </div>
+              </div>
+            )}
+
             {/* Invite Link */}
             <div className="pt-2 border-t border-slate-700/50 flex items-center justify-between text-xs">
-              <div className="text-slate-400 text-[11px]">لینک اختصاصی دعوت:</div>
+              <div className="text-slate-400 text-[11px]">{chat.username ? 'لینک عمومی تلگرام:' : 'لینک اختصاصی دعوت:'}</div>
               <button
                 onClick={copyInviteLink}
                 className="flex items-center gap-1.5 text-cyan-400 hover:text-cyan-300 font-mono text-[11px] bg-slate-900/60 px-2.5 py-1 rounded-lg border border-slate-700/60 transition-colors cursor-pointer"
                 dir="ltr"
               >
-                <span>t.me/+godfather_{chat.id}</span>
+                <span>{chat.username ? `t.me/${chat.username}` : `t.me/+godfather_${chat.id}`}</span>
                 {copiedLink ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               </button>
             </div>

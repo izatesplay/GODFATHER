@@ -263,4 +263,186 @@ export async function saveStoryToRemote(story: Story): Promise<boolean> {
   }
 }
 
+/**
+ * اعتبارسنجی فرمت و نویسه‌های نام کاربری یا شناسه کانال
+ */
+export function validateUsernameFormat(raw: string): { valid: boolean; clean: string; error?: string } {
+  const clean = raw.trim().replace(/^@+/, '').toLowerCase();
+  if (!clean) {
+    return { valid: false, clean: '', error: 'نام کاربری نمی‌تواند خالی باشد.' };
+  }
+  if (clean.length < 3) {
+    return { valid: false, clean, error: 'نام کاربری باید حداقل ۳ نویسه باشد.' };
+  }
+  if (clean.length > 32) {
+    return { valid: false, clean, error: 'نام کاربری نمی‌تواند بیشتر از ۳۲ نویسه باشد.' };
+  }
+  if (!/^[a-z0-9_]+$/.test(clean)) {
+    return { valid: false, clean, error: 'نام کاربری فقط می‌تواند شامل حروف انگلیسی کوچک (a-z)، اعداد (0-9) و زیرخط (_) باشد.' };
+  }
+  if (/^[0-9]/.test(clean)) {
+    return { valid: false, clean, error: 'نام کاربری نمی‌تواند با عدد شروع شود.' };
+  }
+  return { valid: true, clean };
+}
+
+/**
+ * بررسی بلادرنگ یکتایی نام کاربری در بین کاربران و کانال‌های موجود (کلاینت)
+ */
+export function checkLocalUsernameAvailable(
+  raw: string,
+  users: User[] = [],
+  chats: Chat[] = [],
+  excludeId?: string
+): { available: boolean; clean: string; error?: string; message?: string } {
+  const validation = validateUsernameFormat(raw);
+  if (!validation.valid) {
+    return { available: false, clean: validation.clean, error: validation.error };
+  }
+
+  const clean = validation.clean;
+
+  // ۱. بررسی در میان تمام کاربران
+  const duplicateUser = users.find(
+    (u) => u.id !== excludeId && (u.username || '').trim().replace(/^@+/, '').toLowerCase() === clean
+  );
+  if (duplicateUser) {
+    return {
+      available: false,
+      clean,
+      error: `نام کاربری «@${clean}» قبلاً توسط کاربر دیگری ثبت شده و اختصاصی است.`
+    };
+  }
+
+  // ۲. بررسی در میان تمام کانال‌ها و گروه‌ها
+  const duplicateChat = chats.find(
+    (c) => c.id !== excludeId && (c.username || '').trim().replace(/^@+/, '').toLowerCase() === clean
+  );
+  if (duplicateChat) {
+    const label = duplicateChat.type === 'channel' ? 'کانال' : 'گروه';
+    return {
+      available: false,
+      clean,
+      error: `شناسه «@${clean}» قبلاً برای ${label} «${duplicateChat.title}» ثبت شده است.`
+    };
+  }
+
+  return {
+    available: true,
+    clean,
+    message: `شناسه @${clean} آزاد و قابل استفاده است.`
+  };
+}
+
+/**
+ * استعلام آنلاین یکتایی نام کاربری از سرور (MySQL / Express)
+ */
+export async function checkUsernameAvailability(
+  raw: string,
+  excludeId?: string
+): Promise<{ available: boolean; clean: string; message: string; error?: string }> {
+  const validation = validateUsernameFormat(raw);
+  if (!validation.valid) {
+    return { available: false, clean: validation.clean, message: validation.error || 'فرمت نامعتبر', error: validation.error };
+  }
+
+  const clean = validation.clean;
+  const url = getApiBaseUrl().replace(/\/$/, '');
+
+  try {
+    const query = `${url}?action=check_username&username=${encodeURIComponent(clean)}&excludeId=${encodeURIComponent(excludeId || '')}`;
+    const res = await fetch(query, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+
+    if (!res.ok) {
+      return { available: true, clean, message: `شناسه @${clean} معتبر است.` };
+    }
+
+    const json = await res.json();
+    if (json.status === 'success' && json.data) {
+      return {
+        available: !!json.data.available,
+        clean,
+        message: json.message || (json.data.available ? `شناسه @${clean} آزاد است.` : `شناسه @${clean} تکراری است.`),
+        error: !json.data.available ? json.message : undefined
+      };
+    } else if (json.available !== undefined) {
+      return {
+        available: !!json.available,
+        clean,
+        message: json.message || json.error || '',
+        error: !json.available ? (json.error || json.message) : undefined
+      };
+    }
+
+    return { available: true, clean, message: `شناسه @${clean} در دسترس است.` };
+  } catch {
+    return { available: true, clean, message: `شناسه @${clean} تایید شد.` };
+  }
+}
+
+/**
+ * به‌روزرسانی مشخصات کاربر در پایگاه داده با حفظ یکتایی نام کاربری
+ */
+export async function updateUserOnRemote(
+  user: Partial<User> & { id: string }
+): Promise<{ success: boolean; message?: string; error?: string }> {
+  const url = getApiBaseUrl().replace(/\/$/, '');
+  try {
+    const res = await fetch(`${url}?action=update_user`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify(user)
+    });
+
+    const json = await res.json();
+    if (json.status === 'success') {
+      return { success: true, message: json.message };
+    }
+    return { success: false, error: json.message || json.error || 'خطا در به‌روزرسانی اطلاعات کاربر' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'خطا در اتصال به سرور' };
+  }
+}
+
+/**
+ * ثبت نام کاربر جدید در پایگاه داده سرور
+ */
+export async function registerUserOnRemote(userData: {
+  name: string;
+  username: string;
+  phone: string;
+  password?: string;
+  avatar?: string;
+  bio?: string;
+}): Promise<{ success: boolean; user?: User; error?: string }> {
+  const url = getApiBaseUrl().replace(/\/$/, '');
+  try {
+    const res = await fetch(`${url}?action=register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        ...userData,
+        password: userData.password || 'user1234'
+      })
+    });
+
+    const json = await res.json();
+    if (json.status === 'success' && json.data?.user) {
+      return { success: true, user: json.data.user };
+    }
+    return { success: false, error: json.message || json.error || 'خطا در ثبت نام' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'خطا در اتصال به سرور' };
+  }
+}
+
 

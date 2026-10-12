@@ -147,13 +147,15 @@ function initializeDatabaseSchema($conn) {
             `reaction_preview` VARCHAR(50) DEFAULT NULL,
             `creator_id` VARCHAR(64) DEFAULT NULL,
             `is_user_admin` TINYINT(1) DEFAULT 1,
+            `username` VARCHAR(100) DEFAULT NULL,
             `members_json` LONGTEXT,
             `active_call_json` LONGTEXT,
             `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
             INDEX `idx_type` (`type`),
             INDEX `idx_is_pinned` (`is_pinned`),
-            INDEX `idx_creator` (`creator_id`)
+            INDEX `idx_creator` (`creator_id`),
+            INDEX `idx_username` (`username`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;",
 
         // ۳. جدول پیام‌ها
@@ -839,14 +841,29 @@ switch ($action) {
         }
 
         // بررسی تکراری نبودن شماره یا یوزرنیم
-        $chk = $db->prepare("SELECT id FROM users WHERE phone = ? OR username = ? LIMIT 1");
-        $chk->bind_param('ss', $phone, $username);
-        $chk->execute();
-        if ($chk->get_result()->num_rows > 0) {
-            sendError('این شماره موبایل یا نام کاربری قبلاً در سامانه ثبت شده است.');
+        $cleanUsername = strtolower(ltrim(trim($username), '@'));
+        $chkPhone = $db->prepare("SELECT id FROM users WHERE phone = ? LIMIT 1");
+        $chkPhone->bind_param('s', $phone);
+        $chkPhone->execute();
+        if ($chkPhone->get_result()->num_rows > 0) {
+            sendError('این شماره موبایل قبلاً در سامانه ثبت شده است. لطفاً وارد شوید.');
         }
 
-        $isSuperAdmin = ($phone === '09921758505' || strtolower($username) === 'admin');
+        $chkUser = $db->prepare("SELECT id FROM users WHERE LOWER(username) = ? LIMIT 1");
+        $chkUser->bind_param('s', $cleanUsername);
+        $chkUser->execute();
+        if ($chkUser->get_result()->num_rows > 0) {
+            sendError("نام کاربری «@$cleanUsername» قبلاً توسط کاربر دیگری ثبت شده و اختصاصی است.");
+        }
+
+        $chkChat = $db->prepare("SELECT id FROM chats WHERE LOWER(username) = ? LIMIT 1");
+        $chkChat->bind_param('s', $cleanUsername);
+        $chkChat->execute();
+        if ($chkChat->get_result()->num_rows > 0) {
+            sendError("شناسه «@$cleanUsername» قبلاً برای یک کانال یا گروه ثبت شده است.");
+        }
+
+        $isSuperAdmin = ($phone === '09921758505' || $cleanUsername === 'admin' || $cleanUsername === 'izatesplay');
         $role = $isSuperAdmin ? 'superadmin' : 'member';
         $isPremium = $isSuperAdmin ? 1 : 0;
         $stars = $isSuperAdmin ? 50000 : 100;
@@ -854,14 +871,14 @@ switch ($action) {
         $passHash = password_hash($password, PASSWORD_DEFAULT);
 
         $stmt = $db->prepare("INSERT INTO users (id, name, username, phone, password_hash, avatar, bio, is_premium, role, stars_balance) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param('ssssssisss', $id, $name, $username, $phone, $passHash, $avatar, $bio, $isPremium, $role, $stars);
+        $stmt->bind_param('ssssssisss', $id, $name, $cleanUsername, $phone, $passHash, $avatar, $bio, $isPremium, $role, $stars);
         
         if ($stmt->execute()) {
             sendSuccess([
                 'user' => [
                     'id' => $id,
                     'name' => $name,
-                    'username' => $username,
+                    'username' => $cleanUsername,
                     'phone' => $phone,
                     'avatar' => $avatar,
                     'bio' => $bio,
@@ -893,14 +910,32 @@ switch ($action) {
         $cDesc = $c['description'] ?? '';
         $cCreatorId = $c['creatorId'] ?? null;
         $cIsUserAdmin = isset($c['isUserAdmin']) ? ($c['isUserAdmin'] ? 1 : 0) : 1;
+        $cUsername = !empty($c['username']) ? strtolower(ltrim(trim($c['username']), '@')) : null;
         $cMembersJson = !empty($c['members']) ? json_encode($c['members'], JSON_UNESCAPED_UNICODE) : null;
         $cActiveCallJson = !empty($c['activeCall']) ? json_encode($c['activeCall'], JSON_UNESCAPED_UNICODE) : null;
 
-        $stmt = $db->prepare("INSERT INTO chats (id, type, title, avatar, description, creator_id, is_user_admin, members_json, active_call_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE title=VALUES(title), avatar=VALUES(avatar), description=VALUES(description), creator_id=COALESCE(VALUES(creator_id), creator_id), is_user_admin=VALUES(is_user_admin), members_json=COALESCE(VALUES(members_json), members_json), active_call_json=VALUES(active_call_json)");
-        $stmt->bind_param('ssssssiss', $cId, $cType, $cTitle, $cAvatar, $cDesc, $cCreatorId, $cIsUserAdmin, $cMembersJson, $cActiveCallJson);
+        // بررسی یکتایی و اختصاصی بودن آیدی کانال یا گروه
+        if ($cUsername) {
+            $chkChatDup = $db->prepare("SELECT id FROM chats WHERE LOWER(username) = ? AND id != ? LIMIT 1");
+            $chkChatDup->bind_param('ss', $cUsername, $cId);
+            $chkChatDup->execute();
+            if ($chkChatDup->get_result()->num_rows > 0) {
+                sendError("شناسه «@$cUsername» قبلاً برای یک کانال یا گروه دیگر ثبت شده است و تکراری است.");
+            }
+
+            $chkUserDup = $db->prepare("SELECT id FROM users WHERE LOWER(username) = ? LIMIT 1");
+            $chkUserDup->bind_param('s', $cUsername);
+            $chkUserDup->execute();
+            if ($chkUserDup->get_result()->num_rows > 0) {
+                sendError("شناسه «@$cUsername» قبلاً توسط یک کاربر ثبت شده است و امکان استفاده برای کانال وجود ندارد.");
+            }
+        }
+
+        $stmt = $db->prepare("INSERT INTO chats (id, type, title, avatar, description, creator_id, is_user_admin, username, members_json, active_call_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE title=VALUES(title), avatar=VALUES(avatar), description=VALUES(description), creator_id=COALESCE(VALUES(creator_id), creator_id), is_user_admin=VALUES(is_user_admin), username=VALUES(username), members_json=COALESCE(VALUES(members_json), members_json), active_call_json=VALUES(active_call_json)");
+        $stmt->bind_param('ssssssisss', $cId, $cType, $cTitle, $cAvatar, $cDesc, $cCreatorId, $cIsUserAdmin, $cUsername, $cMembersJson, $cActiveCallJson);
         if ($stmt->execute()) {
-            sendSuccess(['id' => $cId], 'گفتگو با موفقیت ذخیره شد.');
+            sendSuccess(['id' => $cId, 'username' => $cUsername], 'گفتگو با موفقیت ذخیره شد.');
         } else {
             sendError('خطا در ذخیره گفتگو: ' . $db->error);
         }
@@ -1060,6 +1095,90 @@ switch ($action) {
             'sourceLang' => 'auto',
             'targetLang' => $tl
         ], 'ترجمه انجام نشد');
+        break;
+
+    // ۱۳. بررسی یکتایی و در دسترس بودن نام کاربری / شناسه کانال (check_username)
+    case 'check_username':
+        $rawUsername = trim($_GET['username'] ?? $inputData['username'] ?? '');
+        $excludeId = trim($_GET['excludeId'] ?? $inputData['excludeId'] ?? '');
+        $username = strtolower(ltrim($rawUsername, '@'));
+
+        if (empty($username) || strlen($username) < 3) {
+            sendSuccess(['available' => false, 'message' => 'شناسه یا نام کاربری باید حداقل ۳ نویسه باشد.'], 'شناسه نامعتبر است.');
+        }
+
+        if (!preg_match('/^[a-z0-9_]{3,32}$/', $username)) {
+            sendSuccess(['available' => false, 'message' => 'نام کاربری فقط می‌تواند شامل حروف انگلیسی (a-z)، اعداد و زیرخط (_) باشد.'], 'فرمت نامعتبر است.');
+        }
+
+        // ۱. بررسی در میان کاربران
+        $chkUser = $db->prepare("SELECT id FROM users WHERE LOWER(username) = ? AND id != ? LIMIT 1");
+        $chkUser->bind_param('ss', $username, $excludeId);
+        $chkUser->execute();
+        if ($chkUser->get_result()->num_rows > 0) {
+            sendSuccess(['available' => false, 'message' => "نام کاربری «@$username» قبلاً توسط کاربر دیگری ثبت شده و اختصاصی است."], 'نام کاربری تکراری است.');
+        }
+
+        // ۲. بررسی در میان کانال‌ها و گروه‌ها
+        $chkChat = $db->prepare("SELECT id, type, title FROM chats WHERE LOWER(username) = ? AND id != ? LIMIT 1");
+        $chkChat->bind_param('ss', $username, $excludeId);
+        $chkChat->execute();
+        $chatRow = $chkChat->get_result()->fetch_assoc();
+        if ($chatRow) {
+            $chatTypeLabel = ($chatRow['type'] === 'channel') ? 'کانال' : 'گروه';
+            sendSuccess(['available' => false, 'message' => "شناسه «@$username» قبلاً برای $chatTypeLabel «{$chatRow['title']}» ثبت شده است."], 'شناسه تکراری است.');
+        }
+
+        sendSuccess(['available' => true, 'message' => "شناسه @$username آزاد، اختصاصی و قابل ثبت است."], 'شناسه در دسترس است.');
+        break;
+
+    // ۱۴. بروزرسانی پروفایل کاربر (update_user) با اعتبارسنجی نام کاربری
+    case 'update_user':
+        if ($_SERVER['REQUEST_METHOD'] !== 'POST') sendError('متد POST نیاز است', 405);
+        $uData = $inputData;
+        $uId = trim($uData['id'] ?? '');
+        if (!$uId) sendError('شناسه کاربر الزامی است.');
+
+        $uName = trim($uData['name'] ?? '');
+        $rawUName = trim($uData['username'] ?? '');
+        $uBio = trim($uData['bio'] ?? '');
+        $uAvatar = $uData['avatar'] ?? null;
+
+        if (!empty($rawUName)) {
+            $cleanUName = strtolower(ltrim($rawUName, '@'));
+            if (strlen($cleanUName) < 3) {
+                sendError('نام کاربری باید حداقل ۳ نویسه باشد.');
+            }
+            if (!preg_match('/^[a-z0-9_]{3,32}$/', $cleanUName)) {
+                sendError('نام کاربری فقط می‌تواند شامل حروف انگلیسی، اعداد و زیرخط باشد.');
+            }
+
+            // بررسی تکراری نبودن در بین دیگر کاربران
+            $chkUser = $db->prepare("SELECT id FROM users WHERE LOWER(username) = ? AND id != ? LIMIT 1");
+            $chkUser->bind_param('ss', $cleanUName, $uId);
+            $chkUser->execute();
+            if ($chkUser->get_result()->num_rows > 0) {
+                sendError("نام کاربری «@$cleanUName» قبلاً توسط کاربر دیگری رزرو شده است.");
+            }
+
+            // بررسی تکراری نبودن با کانال‌ها
+            $chkChat = $db->prepare("SELECT id FROM chats WHERE LOWER(username) = ? LIMIT 1");
+            $chkChat->bind_param('s', $cleanUName);
+            $chkChat->execute();
+            if ($chkChat->get_result()->num_rows > 0) {
+                sendError("شناسه «@$cleanUName» برای یک کانال یا گروه ثبت شده است.");
+            }
+        } else {
+            $cleanUName = null;
+        }
+
+        $stmt = $db->prepare("UPDATE users SET name = COALESCE(NULLIF(?, ''), name), username = COALESCE(?, username), bio = COALESCE(?, bio), avatar = COALESCE(?, avatar) WHERE id = ?");
+        $stmt->bind_param('sssss', $uName, $cleanUName, $uBio, $uAvatar, $uId);
+        if ($stmt->execute()) {
+            sendSuccess(['id' => $uId, 'username' => $cleanUName], 'پروفایل کاربر با موفقیت به‌روزرسانی شد.');
+        } else {
+            sendError('خطا در بروزرسانی پروفایل: ' . $db->error);
+        }
         break;
 
     default:

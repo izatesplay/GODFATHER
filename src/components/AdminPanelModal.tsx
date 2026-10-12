@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { User } from '../types/telegram';
+import { User, Chat } from '../types/telegram';
 import { 
   X, 
   ShieldAlert, 
@@ -25,14 +25,17 @@ import {
   UserX,
   Volume2,
   Megaphone,
-  LogIn
+  LogIn,
+  AlertCircle
 } from 'lucide-react';
+import { checkLocalUsernameAvailable, validateUsernameFormat } from '../utils/apiSync';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentUser: User;
   usersList: User[];
+  chats?: Chat[];
   onToggleUserPremium: (userId: string) => void;
   onChangeUserRole: (userId: string, newRole: 'superadmin' | 'admin' | 'moderator' | 'member') => void;
   onAddStarsToUser: (userId: string, amount: number) => void;
@@ -46,6 +49,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   onClose,
   currentUser,
   usersList,
+  chats = [],
   onToggleUserPremium,
   onChangeUserRole,
   onAddStarsToUser,
@@ -69,6 +73,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [newRole, setNewRole] = useState<'member' | 'moderator' | 'admin'>('member');
   const [newIsPremium, setNewIsPremium] = useState(false);
   const [newUserAvatar, setNewUserAvatar] = useState('https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80');
+  const [createUserError, setCreateUserError] = useState<string | null>(null);
   const newUserFileInputRef = useRef<HTMLInputElement>(null);
   
   // Audit logs state
@@ -141,12 +146,29 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
 
   const handleCreateUser = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newName.trim() || !newUsername.trim() || !newPhone.trim()) return;
+    setCreateUserError(null);
+    if (!newName.trim() || !newUsername.trim() || !newPhone.trim()) {
+      setCreateUserError('لطفاً تمام فیلدها را وارد کنید.');
+      return;
+    }
+
+    const cleanUsername = newUsername.trim().replace(/^@+/, '').toLowerCase();
+    const formatCheck = validateUsernameFormat(cleanUsername);
+    if (!formatCheck.valid) {
+      setCreateUserError(formatCheck.error || 'فرمت نام کاربری نامعتبر است.');
+      return;
+    }
+
+    const localCheck = checkLocalUsernameAvailable(cleanUsername, usersList, chats);
+    if (!localCheck.available) {
+      setCreateUserError(localCheck.error || 'این نام کاربری قبلاً استفاده شده و تکراری است.');
+      return;
+    }
 
     const userObj: User = {
       id: `usr_${Date.now()}`,
       name: newName.trim(),
-      username: newUsername.trim().replace('@', ''),
+      username: cleanUsername,
       phone: newPhone.trim(),
       avatar: newUserAvatar,
       bio: 'کاربر ایجاد شده توسط پنل مدیریت ارشد',
@@ -172,6 +194,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     setNewName('');
     setNewUsername('');
     setNewPhone('');
+    setCreateUserError(null);
     setActiveTab('users');
   };
 
@@ -451,6 +474,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                   <span>انتخاب عکس از حافظه گوشی</span>
                 </button>
               </div>
+
+              {createUserError && (
+                <div className="p-2.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 flex-shrink-0 text-rose-400" />
+                  <span>{createUserError}</span>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <label className="text-xs text-slate-300">نام نمایشی:</label>

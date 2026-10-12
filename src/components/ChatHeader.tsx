@@ -38,6 +38,8 @@ interface ChatHeaderProps {
   onAddMemberToChat?: (memberName: string) => void;
   onUpdateBio?: (newBio: string) => void;
   onToggleChatAdmin?: (chatId: string, memberId: string, grantAdmin: boolean) => void;
+  onToggleSearch?: () => void;
+  isSearchOpen?: boolean;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -52,7 +54,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   usersList = [],
   onAddMemberToChat,
   onUpdateBio,
-  onToggleChatAdmin
+  onToggleChatAdmin,
+  onToggleSearch,
+  isSearchOpen
 }) => {
   const [showTopicMenu, setShowTopicMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
@@ -61,34 +65,34 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const [copiedLink, setCopiedLink] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-  const isGroup = chat.type === 'group' || chat.type === 'supergroup';
-  const isChannel = chat.type === 'channel';
+  const isGroup = chat?.type === 'group' || chat?.type === 'supergroup';
+  const isChannel = chat?.type === 'channel';
 
-  const isSuperAdmin = currentUser.phone === '09921758505' || currentUser.role === 'superadmin' || currentUser.username === 'izatesplay';
+  const isSuperAdmin = currentUser?.phone === '09921758505' || currentUser?.role === 'superadmin' || currentUser?.username === 'izatesplay';
 
   // The creator of the group is ALWAYS the Owner and Manager
   const isChatOwner =
     isSuperAdmin ||
-    Boolean(chat.creatorId && (
-      chat.creatorId === currentUser.id ||
-      chat.creatorId === currentUser.phone ||
-      chat.creatorId === currentUser.username ||
-      chat.creatorId === currentUser.name
+    Boolean(chat?.creatorId && (
+      chat.creatorId === currentUser?.id ||
+      chat.creatorId === currentUser?.phone ||
+      chat.creatorId === currentUser?.username ||
+      chat.creatorId === currentUser?.name
     )) ||
-    Boolean(chat.members?.some(m =>
-      (m.id === currentUser.id || m.username === currentUser.username || m.phone === currentUser.phone || m.name === currentUser.name) &&
+    Boolean(chat?.members?.some(m =>
+      (m.id === currentUser?.id || m.username === currentUser?.username || m.phone === currentUser?.phone || m.name === currentUser?.name) &&
       m.role === 'owner'
     )) ||
-    chat.isUserAdmin === true ||
-    Boolean(!chat.creatorId && (chat.id.startsWith('group_') || chat.id.startsWith('channel_')));
+    chat?.isUserAdmin === true ||
+    Boolean(!chat?.creatorId && (chat?.id?.startsWith('group_') || chat?.id?.startsWith('channel_')));
 
-  const isAssignedAdmin = Boolean(chat.members?.some(m =>
-    (m.id === currentUser.id || m.username === currentUser.username || m.phone === currentUser.phone || m.name === currentUser.name) &&
+  const isAssignedAdmin = Boolean(chat?.members?.some(m =>
+    (m.id === currentUser?.id || m.username === currentUser?.username || m.phone === currentUser?.phone || m.name === currentUser?.name) &&
     (m.role === 'admin' || m.role === 'owner')
   ));
 
-  const isChatAdmin = isSuperAdmin || isChatOwner || isAssignedAdmin || chat.isUserAdmin === true;
-  const isCallActive = !!chat.activeCall?.isActive;
+  const isChatAdmin = isSuperAdmin || isChatOwner || isAssignedAdmin || chat?.isUserAdmin === true;
+  const isCallActive = !!chat?.activeCall?.isActive;
 
   const handleVoiceCallClick = (type: 'audio' | 'video' = 'audio') => {
     if (isGroup || isChannel) {
@@ -371,8 +375,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
 
           {/* Search messages */}
           <button
-            className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors cursor-pointer hidden sm:flex"
-            title="جستجو در گفتگو"
+            onClick={onToggleSearch}
+            className={`p-2 rounded-xl transition-all cursor-pointer flex items-center justify-center ${
+              isSearchOpen
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-xs'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+            title="جستجو در گفتگو (Ctrl+F)"
           >
             <Search className="w-4 h-4" />
           </button>
@@ -394,12 +403,22 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                   <button
                     onClick={() => {
                       setShowOptionsMenu(false);
+                      onToggleSearch?.();
+                    }}
+                    className="w-full text-right px-4 py-2 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
+                  >
+                    <span>جستجو در پیام‌ها</span>
+                    <Search className="w-3.5 h-3.5 text-cyan-400" />
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowOptionsMenu(false);
                       setShowGroupProfile(true);
                     }}
                     className="w-full text-right px-4 py-2 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
                   >
                     <span>مشاهده بیو و اعضا</span>
-                    <Users className="w-3.5 h-3.5 text-cyan-400" />
+                    <Users className="w-3.5 h-3.5 text-slate-400" />
                   </button>
                   <button
                     onClick={() => {

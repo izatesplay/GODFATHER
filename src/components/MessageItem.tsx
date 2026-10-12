@@ -29,6 +29,7 @@ interface MessageItemProps {
   onTranscribe: (messageId: string) => void;
   onTranslateMessage?: (messageId: string) => void;
   isTranslatingChat?: boolean;
+  isHighlighted?: boolean;
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '🔥', '🎉'];
@@ -43,7 +44,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onDelete,
   onTranscribe,
   onTranslateMessage,
-  isTranslatingChat
+  isTranslatingChat,
+  isHighlighted
 }) => {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -58,7 +60,8 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
   return (
     <div
-      className={`group relative flex flex-col my-1 px-4 transition-colors ${
+      id={`msg-${message.id}`}
+      className={`group relative flex flex-col my-1 px-4 transition-all duration-300 ${
         isOutgoing ? 'items-end' : 'items-start'
       }`}
       onMouseLeave={() => {
@@ -75,8 +78,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
 
       {/* Main Message Bubble */}
       <div
-        className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 shadow-sm text-sm transition-all ${
-          message.type === 'system'
+        className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 shadow-sm text-sm transition-all duration-300 ${
+          isHighlighted
+            ? 'ring-2 ring-cyan-400 shadow-xl shadow-cyan-500/30 scale-[1.01] bg-cyan-950/70 border-cyan-400'
+            : message.type === 'system'
             ? 'bg-slate-800/80 text-slate-300 text-xs text-center mx-auto my-2 border border-slate-700/50 max-w-md'
             : isOutgoing
             ? 'bg-gradient-to-r from-[#2b5278] to-[#1e3c5a] text-white rounded-br-xs border border-blue-600/30'

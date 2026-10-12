@@ -21,6 +21,7 @@ import {
 import { translateText } from './utils/translator';
 import { Sidebar } from './components/Sidebar';
 import { ChatHeader } from './components/ChatHeader';
+import { ChatSearchBar } from './components/ChatSearchBar';
 import { MessageItem } from './components/MessageItem';
 import { MessageInput } from './components/MessageInput';
 import { CallModal } from './components/CallModal';
@@ -39,7 +40,13 @@ import { ShieldCheck, Sparkles, Crown } from 'lucide-react';
 const getInitialState = <T,>(key: string, defaultValue: T): T => {
   try {
     const saved = localStorage.getItem(`cp_${key}`);
-    return saved ? JSON.parse(saved) : defaultValue;
+    if (!saved || saved === 'null' || saved === 'undefined') return defaultValue;
+    const parsed = JSON.parse(saved);
+    if (parsed === null || parsed === undefined) return defaultValue;
+    if (Array.isArray(defaultValue) && (!Array.isArray(parsed) || parsed.length === 0)) {
+      return defaultValue;
+    }
+    return parsed;
   } catch {
     return defaultValue;
   }
@@ -47,23 +54,40 @@ const getInitialState = <T,>(key: string, defaultValue: T): T => {
 
 export default function App() {
   // Default to Super Admin (09921758505) with persistence
-  const [currentUser, setCurrentUser] = useState<User>(() => getInitialState('user', ADMIN_USER));
-  const [usersList, setUsersList] = useState<User[]>(() => getInitialState('users_list', INITIAL_SYSTEM_USERS));
-  const [chats, setChats] = useState<Chat[]>(() => getInitialState('chats', INITIAL_CHATS));
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const saved = getInitialState<User | null>('user', ADMIN_USER);
+    return (saved && typeof saved === 'object' && saved.id) ? saved : ADMIN_USER;
+  });
+  const [usersList, setUsersList] = useState<User[]>(() => {
+    const saved = getInitialState<User[]>('users_list', INITIAL_SYSTEM_USERS);
+    return (Array.isArray(saved) && saved.length > 0) ? saved : INITIAL_SYSTEM_USERS;
+  });
+  const [chats, setChats] = useState<Chat[]>(() => {
+    const saved = getInitialState<Chat[]>('chats', INITIAL_CHATS);
+    return (Array.isArray(saved) && saved.length > 0) ? saved : INITIAL_CHATS;
+  });
   const [activeChatId, setActiveChatId] = useState<string>(() => {
     const savedChats = getInitialState<Chat[]>('chats', INITIAL_CHATS);
-    return savedChats[0]?.id || 'chat_saved';
+    return (Array.isArray(savedChats) && savedChats[0]?.id) || INITIAL_CHATS[0].id;
   });
-  const [messages, setMessages] = useState<Record<string, Message[]>>(() => getInitialState('messages', INITIAL_MESSAGES));
+  const [messages, setMessages] = useState<Record<string, Message[]>>(() => {
+    const saved = getInitialState<Record<string, Message[]>>('messages', INITIAL_MESSAGES);
+    return (saved && typeof saved === 'object' && !Array.isArray(saved)) ? saved : INITIAL_MESSAGES;
+  });
   const [stories, setStories] = useState<Story[]>(() => {
-    const saved = getInitialState('stories', INITIAL_STORIES);
-    if (!saved || saved.length === 0) return INITIAL_STORIES;
-    return saved;
+    const saved = getInitialState<Story[]>('stories', INITIAL_STORIES);
+    return (Array.isArray(saved) && saved.length > 0) ? saved : INITIAL_STORIES;
   });
-  const [contacts, setContacts] = useState<Contact[]>(() => getInitialState('contacts', INITIAL_CONTACTS));
-  const [folders, setFolders] = useState<ChatFolder[]>(() => getInitialState('folders', DEFAULT_FOLDERS));
+  const [contacts, setContacts] = useState<Contact[]>(() => {
+    const saved = getInitialState<Contact[]>('contacts', INITIAL_CONTACTS);
+    return Array.isArray(saved) ? saved : INITIAL_CONTACTS;
+  });
+  const [folders, setFolders] = useState<ChatFolder[]>(() => {
+    const saved = getInitialState<ChatFolder[]>('folders', DEFAULT_FOLDERS);
+    return (Array.isArray(saved) && saved.length > 0) ? saved : DEFAULT_FOLDERS;
+  });
   const [miniApps] = useState<MiniApp[]>(INITIAL_MINI_APPS);
-  const [userStars, setUserStars] = useState<number>(currentUser.starsBalance || 50000);
+  const [userStars, setUserStars] = useState<number>(() => currentUser?.starsBalance || 50000);
 
   // PWA / Web2App install state
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
@@ -117,45 +141,79 @@ export default function App() {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null);
   const [isTranslatingChat, setIsTranslatingChat] = useState(false);
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar');
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const activeChat = chats.find((c) => c.id === activeChatId) || chats[0];
-  const isSuperAdmin = currentUser.phone === '09921758505' || currentUser.role === 'superadmin' || currentUser.username === 'izatesplay';
+  const activeChat: Chat =
+    (chats && chats.length > 0 ? (chats.find((c) => c.id === activeChatId) || chats[0]) : null) ||
+    INITIAL_CHATS[0];
+  const isSuperAdmin = currentUser?.phone === '09921758505' || currentUser?.role === 'superadmin' || currentUser?.username === 'izatesplay';
 
   // The creator of the group is ALWAYS the Owner & Manager
   const isChatOwner =
     isSuperAdmin ||
-    Boolean(activeChat.creatorId && (
-      activeChat.creatorId === currentUser.id ||
-      activeChat.creatorId === currentUser.phone ||
-      activeChat.creatorId === currentUser.username ||
-      activeChat.creatorId === currentUser.name
+    Boolean(activeChat?.creatorId && (
+      activeChat.creatorId === currentUser?.id ||
+      activeChat.creatorId === currentUser?.phone ||
+      activeChat.creatorId === currentUser?.username ||
+      activeChat.creatorId === currentUser?.name
     )) ||
-    Boolean(activeChat.members?.some((m) =>
-      (m.id === currentUser.id || m.username === currentUser.username || m.phone === currentUser.phone || m.name === currentUser.name) &&
+    Boolean(activeChat?.members?.some((m) =>
+      (m.id === currentUser?.id || m.username === currentUser?.username || m.phone === currentUser?.phone || m.name === currentUser?.name) &&
       m.role === 'owner'
     )) ||
-    activeChat.isUserAdmin === true ||
-    Boolean(!activeChat.creatorId && (activeChat.id.startsWith('group_') || activeChat.id.startsWith('channel_')));
+    activeChat?.isUserAdmin === true ||
+    Boolean(!activeChat?.creatorId && (activeChat?.id?.startsWith('group_') || activeChat?.id?.startsWith('channel_')));
 
-  const isAssignedAdmin = Boolean(activeChat.members?.some(
-    (m) => (m.id === currentUser.id || m.username === currentUser.username || m.phone === currentUser.phone || m.name === currentUser.name) &&
+  const isAssignedAdmin = Boolean(activeChat?.members?.some(
+    (m) => (m.id === currentUser?.id || m.username === currentUser?.username || m.phone === currentUser?.phone || m.name === currentUser?.name) &&
     (m.role === 'admin' || m.role === 'owner')
   ));
 
-  const isChatAdmin = isSuperAdmin || isChatOwner || isAssignedAdmin || activeChat.isUserAdmin === true;
-  const currentChatMessages = messages[activeChatId] || [];
+  const isChatAdmin = isSuperAdmin || isChatOwner || isAssignedAdmin || activeChat?.isUserAdmin === true;
+  const currentChatMessages = (activeChat?.id && messages && messages[activeChat.id]) ? messages[activeChat.id] : [];
 
   // Filter messages by topic if in a supergroup forum
-  const displayedMessages = activeChat.activeTopicId
+  const displayedMessages = activeChat?.activeTopicId
     ? currentChatMessages.filter((m) => !m.topicId || m.topicId === activeChat.activeTopicId)
     : currentChatMessages;
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!highlightedMessageId) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [displayedMessages.length, activeChatId]);
+
+  // Jump to specific message and highlight it smoothly
+  const handleSelectSearchedMessage = (messageId: string) => {
+    setHighlightedMessageId(messageId);
+    setTimeout(() => {
+      const el = document.getElementById(`msg-${messageId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 60);
+
+    // Fade out highlight after 3 seconds
+    setTimeout(() => {
+      setHighlightedMessageId((prev) => (prev === messageId ? null : prev));
+    }, 3200);
+  };
+
+  // Keyboard shortcut for search (Ctrl+F / Cmd+F)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        setIsSearchOpen((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Auto-save local changes to localStorage
   useEffect(() => {
@@ -951,6 +1009,18 @@ export default function App() {
             );
           }}
           onToggleChatAdmin={handleToggleChatAdmin}
+          onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
+          isSearchOpen={isSearchOpen}
+        />
+
+        {/* In-Chat Interactive Message Search Bar */}
+        <ChatSearchBar
+          isOpen={isSearchOpen}
+          onClose={() => setIsSearchOpen(false)}
+          chat={activeChat}
+          messages={currentChatMessages}
+          onSelectMessage={handleSelectSearchedMessage}
+          activeTopicId={activeChat.activeTopicId}
         />
 
         {/* Messages Stream Container */}
@@ -983,6 +1053,7 @@ export default function App() {
               onDelete={handleDeleteMessage}
               onTranscribe={handleTranscribeMessage}
               isTranslatingChat={isTranslatingChat}
+              isHighlighted={highlightedMessageId === msg.id}
             />
           ))}
 
@@ -1008,11 +1079,13 @@ export default function App() {
       {/* Interactive Modals */}
 
       {/* 1. Super Admin Panel (For 09921758505) */}
+      {/* 1. Super Admin Panel (For 09921758505) */}
       <AdminPanelModal
         isOpen={isAdminPanelOpen}
         onClose={() => setIsAdminPanelOpen(false)}
         currentUser={currentUser}
         usersList={usersList}
+        chats={chats}
         onToggleUserPremium={handleToggleUserPremium}
         onChangeUserRole={handleChangeUserRole}
         onAddStarsToUser={handleAddStarsToUser}
@@ -1027,6 +1100,8 @@ export default function App() {
         onClose={() => setIsAuthOpen(false)}
         onLoginSuccess={handleLoginSuccess}
         currentUser={currentUser}
+        usersList={usersList}
+        chats={chats}
       />
 
       {/* 3. Architecture Blueprint Modal (Phase 1 Specifications) */}
@@ -1113,6 +1188,8 @@ export default function App() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         currentUser={currentUser}
+        usersList={usersList}
+        chats={chats}
         onUpdateUser={handleUpdateUser}
         onOpenAuth={() => setIsAuthOpen(true)}
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}

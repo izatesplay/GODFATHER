@@ -98,12 +98,35 @@ app.post('/api/auth/register', (req, res) => {
     return res.status(400).json({ error: 'تمام فیلدهای ثبت نام الزامی است.' });
   }
 
-  const isSuperAdmin = phone.trim() === '09921758505' || username.trim().toLowerCase() === 'admin';
+  const cleanPhone = phone.trim();
+  const cleanUsername = username.trim().replace(/^@+/, '').toLowerCase();
+
+  // بررسی تکراری نبودن شماره تلفن
+  const existingByPhone = registeredUsers.get(cleanPhone) || dbState.users.find((u: any) => u.phone === cleanPhone);
+  if (existingByPhone) {
+    return res.status(400).json({ error: 'این شماره موبایل قبلاً در سامانه ثبت شده است. لطفاً وارد شوید.' });
+  }
+
+  // بررسی تکراری نبودن نام کاربری در بین کاربران
+  const existingByUsername = registeredUsers.get(cleanUsername) ||
+    Array.from(registeredUsers.values()).find((u: any) => (u.username || '').toLowerCase() === cleanUsername) ||
+    dbState.users.find((u: any) => (u.username || '').toLowerCase() === cleanUsername);
+  if (existingByUsername) {
+    return res.status(400).json({ error: `نام کاربری «@${cleanUsername}» قبلاً توسط کاربر دیگری ثبت شده است.` });
+  }
+
+  // بررسی عدم تداخل نام کاربری با شناسه کانال‌ها
+  const existingChatByUsername = dbState.chats.find((c: any) => (c.username || '').toLowerCase() === cleanUsername);
+  if (existingChatByUsername) {
+    return res.status(400).json({ error: `شناسه «@${cleanUsername}» قبلاً برای یک کانال یا گروه ثبت شده است.` });
+  }
+
+  const isSuperAdmin = cleanPhone === '09921758505' || cleanUsername === 'admin' || cleanUsername === 'izatesplay';
   const newUser = {
     id: `usr_${Date.now()}`,
     name: name.trim(),
-    username: username.trim().replace('@', ''),
-    phone: phone.trim(),
+    username: cleanUsername,
+    phone: cleanPhone,
     avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
     isPremium: isSuperAdmin,
     emojiStatus: isSuperAdmin ? '👑' : undefined,
@@ -111,13 +134,48 @@ app.post('/api/auth/register', (req, res) => {
     starsBalance: isSuperAdmin ? 50000 : 100
   };
 
-  registeredUsers.set(phone.trim(), newUser);
-  registeredUsers.set(username.trim().replace('@', ''), newUser);
+  registeredUsers.set(cleanPhone, newUser);
+  registeredUsers.set(cleanUsername, newUser);
+  dbState.users.push(newUser);
 
   return res.json({
     success: true,
     user: newUser
   });
+});
+
+// --- Check Username Uniqueness API (Users & Channels) ---
+app.get('/api/check-username', (req, res) => {
+  const username = ((req.query.username as string) || '').trim().replace(/^@+/, '').toLowerCase();
+  const excludeId = ((req.query.excludeId as string) || '').trim();
+
+  if (!username) {
+    return res.status(400).json({ available: false, error: 'نام کاربری الزامی است.' });
+  }
+
+  if (username.length < 3) {
+    return res.json({ available: false, error: 'شناسه یا نام کاربری باید حداقل ۳ نویسه باشد.' });
+  }
+
+  // ۱. بررسی در میان کاربران
+  for (const user of registeredUsers.values()) {
+    if (user.id !== excludeId && (user.username || '').toLowerCase() === username) {
+      return res.json({ available: false, error: `نام کاربری «@${username}» قبلاً ثبت شده و در دسترس نیست.` });
+    }
+  }
+
+  const userInDb = dbState.users.find((u: any) => u.id !== excludeId && (u.username || '').toLowerCase() === username);
+  if (userInDb) {
+    return res.json({ available: false, error: `نام کاربری «@${username}» قبلاً ثبت شده و در دسترس نیست.` });
+  }
+
+  // ۲. بررسی در میان کانال‌ها و گروه‌ها
+  const chatInDb = dbState.chats.find((c: any) => c.id !== excludeId && (c.username || '').toLowerCase() === username);
+  if (chatInDb) {
+    return res.json({ available: false, error: `شناسه «@${username}» قبلاً برای یک ${chatInDb.type === 'channel' ? 'کانال' : 'گروه'} ثبت شده است.` });
+  }
+
+  return res.json({ available: true, message: `شناسه @${username} آزاد و قابل استفاده است.` });
 });
 
 // --- Super Admin Management APIs (09921758505) ---
@@ -608,6 +666,21 @@ app.all('/api.php', async (req, res) => {
       if (!c || !c.id) {
         return res.status(400).json({ status: 'error', message: 'اطلاعات گفتگو ناقص است' });
       }
+
+      // بررسی یکتا بودن شناسه عمومی کانال/گروه
+      if (c.username) {
+        const cleanU = c.username.trim().replace(/^@+/, '').toLowerCase();
+        const dupChat = dbState.chats.find((x: any) => x.id !== c.id && (x.username || '').toLowerCase() === cleanU);
+        if (dupChat) {
+          return res.status(400).json({ status: 'error', message: `شناسه «@${cleanU}» قبلاً برای یک کانال یا گروه دیگر ثبت شده است.` });
+        }
+        const dupUser = dbState.users.find((u: any) => (u.username || '').toLowerCase() === cleanU) ||
+          Array.from(registeredUsers.values()).find((u: any) => (u.username || '').toLowerCase() === cleanU);
+        if (dupUser) {
+          return res.status(400).json({ status: 'error', message: `شناسه «@${cleanU}» قبلاً توسط یک کاربر ثبت شده است و امکان استفاده برای کانال وجود ندارد.` });
+        }
+      }
+
       const idx = dbState.chats.findIndex((x: any) => x.id === c.id);
       if (idx >= 0) {
         dbState.chats[idx] = { ...dbState.chats[idx], ...c };
@@ -615,6 +688,78 @@ app.all('/api.php', async (req, res) => {
         dbState.chats.unshift(c);
       }
       return res.json({ status: 'success', message: 'گفتگو با موفقیت ذخیره شد.', data: { id: c.id } });
+    }
+
+    case 'check_username': {
+      const username = ((req.query.username as string) || req.body?.username || '').trim().replace(/^@+/, '').toLowerCase();
+      const excludeId = ((req.query.excludeId as string) || req.body?.excludeId || '').trim();
+
+      if (!username || username.length < 3) {
+        return res.json({ status: 'error', message: 'شناسه یا نام کاربری باید حداقل ۳ حرف باشد', data: { available: false } });
+      }
+
+      const dupUser = dbState.users.find((u: any) => u.id !== excludeId && (u.username || '').toLowerCase() === username) ||
+        Array.from(registeredUsers.values()).find((u: any) => u.id !== excludeId && (u.username || '').toLowerCase() === username);
+      if (dupUser) {
+        return res.json({ status: 'error', message: `نام کاربری «@${username}» قبلاً ثبت شده و در دسترس نیست.`, data: { available: false } });
+      }
+
+      const dupChat = dbState.chats.find((c: any) => c.id !== excludeId && (c.username || '').toLowerCase() === username);
+      if (dupChat) {
+        return res.json({ status: 'error', message: `شناسه «@${username}» قبلاً برای یک کانال یا گروه ثبت شده است.`, data: { available: false } });
+      }
+
+      return res.json({ status: 'success', message: `شناسه @${username} آزاد و قابل استفاده است.`, data: { available: true } });
+    }
+
+    case 'update_user': {
+      const uData = req.body;
+      const uId = (uData?.id || '').trim();
+      if (!uId) {
+        return res.status(400).json({ status: 'error', message: 'شناسه کاربر الزامی است.' });
+      }
+
+      const rawUName = (uData?.username || '').trim();
+      if (rawUName) {
+        const cleanUName = rawUName.replace(/^@+/, '').toLowerCase();
+        if (cleanUName.length < 3) {
+          return res.status(400).json({ status: 'error', message: 'نام کاربری باید حداقل ۳ نویسه باشد.' });
+        }
+        if (!/^[a-z0-9_]{3,32}$/.test(cleanUName)) {
+          return res.status(400).json({ status: 'error', message: 'نام کاربری فقط می‌تواند شامل حروف انگلیسی، اعداد و زیرخط باشد.' });
+        }
+
+        // بررسی تکراری نبودن میان دیگر کاربران
+        const dupUser = dbState.users.find((u: any) => u.id !== uId && (u.username || '').toLowerCase() === cleanUName) ||
+          Array.from(registeredUsers.values()).find((u: any) => u.id !== uId && (u.username || '').toLowerCase() === cleanUName);
+        if (dupUser) {
+          return res.status(400).json({ status: 'error', message: `نام کاربری «@${cleanUName}» قبلاً توسط کاربر دیگری ثبت شده و اختصاصی است.` });
+        }
+
+        // بررسی تکراری نبودن میان کانال‌ها و گروه‌ها
+        const dupChat = dbState.chats.find((c: any) => (c.username || '').toLowerCase() === cleanUName);
+        if (dupChat) {
+          return res.status(400).json({ status: 'error', message: `شناسه «@${cleanUName}» قبلاً برای یک کانال یا گروه ثبت شده است.` });
+        }
+
+        uData.username = cleanUName;
+      }
+
+      // به‌روزرسانی در دیتابیس حافظه
+      const uIdx = dbState.users.findIndex((u: any) => u.id === uId);
+      if (uIdx >= 0) {
+        dbState.users[uIdx] = { ...dbState.users[uIdx], ...uData };
+      } else {
+        dbState.users.push(uData);
+      }
+
+      for (const [key, reg] of registeredUsers.entries()) {
+        if (reg.id === uId) {
+          registeredUsers.set(key, { ...reg, ...uData });
+        }
+      }
+
+      return res.json({ status: 'success', message: 'پروفایل کاربر با موفقیت به‌روزرسانی شد.', data: uData });
     }
 
     case 'save_story': {
