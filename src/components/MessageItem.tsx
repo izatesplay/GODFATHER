@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Message, User } from '../types/telegram';
+import { Message, User, CallMusicTrack } from '../types/telegram';
 import { FormattedText } from '../utils/text-formatter';
 import { 
   Play, 
@@ -17,7 +17,10 @@ import {
   Share2, 
   Lock,
   Languages,
-  Eye
+  Eye,
+  Music,
+  Disc3,
+  Radio
 } from 'lucide-react';
 import { SeenByModal } from './SeenByModal';
 import { getSenderFriendlyName } from '../utils/senderHelper';
@@ -44,6 +47,10 @@ interface MessageItemProps {
   isSelected?: boolean;
   onToggleSelect?: (messageId: string) => void;
   onStartSelection?: (messageId: string) => void;
+  // Group Call Music DJ props
+  isCallActive?: boolean;
+  isAdmin?: boolean;
+  onAddSongToCall?: (track: CallMusicTrack, autoPlayIfAdmin?: boolean) => void;
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '🔥', '🎉'];
@@ -69,12 +76,35 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   isSelectionMode = false,
   isSelected = false,
   onToggleSelect,
-  onStartSelection
+  onStartSelection,
+  isCallActive = false,
+  isAdmin = false,
+  onAddSongToCall
 }) => {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
   const [currentAudioTime, setCurrentAudioTime] = useState(0);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  const handleQueueTrack = (autoPlay?: boolean) => {
+    if (!message.mediaUrl || !onAddSongToCall) return;
+    const track: CallMusicTrack = {
+      id: `track_msg_${message.id}`,
+      title: message.audioTitle || message.fileName || message.text || 'فایل صوتی',
+      artist: message.audioPerformer || message.senderName,
+      audioUrl: message.mediaUrl,
+      duration: message.voiceDuration || 180,
+      addedBy: {
+        id: currentUser.id,
+        name: currentUser.name,
+        avatar: currentUser.avatar
+      },
+      addedAt: 'هم‌اکنون',
+      sourceMessageId: message.id,
+      fileSize: message.fileSize
+    };
+    onAddSongToCall(track, autoPlay);
+  };
   const roundVideoRef = useRef<HTMLVideoElement | null>(null);
   const [isRoundVideoMuted, setIsRoundVideoMuted] = useState(true);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
@@ -330,6 +360,101 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </div>
         )}
 
+        {/* Audio / Music Track Message (پخش موسیقی و آهنگ) */}
+        {message.type === 'audio' && (
+          <div className="space-y-2 py-1 min-w-[240px] sm:min-w-[280px]">
+            {/* Native audio element */}
+            {message.mediaUrl && (
+              <audio
+                ref={audioRef}
+                src={message.mediaUrl}
+                onEnded={() => {
+                  setIsPlayingAudio(false);
+                  setAudioProgress(0);
+                }}
+                onTimeUpdate={(e) => {
+                  const el = e.currentTarget;
+                  if (el.duration) {
+                    setAudioProgress((el.currentTime / el.duration) * 100);
+                    setCurrentAudioTime(Math.floor(el.currentTime));
+                  }
+                }}
+                onError={() => {
+                  setIsPlayingAudio(false);
+                }}
+              />
+            )}
+
+            <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-black/30 border border-cyan-500/30 shadow-inner">
+              {/* Play/Pause Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (audioRef.current) {
+                    if (isPlayingAudio) {
+                      audioRef.current.pause();
+                      setIsPlayingAudio(false);
+                    } else {
+                      audioRef.current.play().then(() => {
+                        setIsPlayingAudio(true);
+                      }).catch(() => setIsPlayingAudio(false));
+                    }
+                  } else {
+                    setIsPlayingAudio(!isPlayingAudio);
+                  }
+                }}
+                className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white flex items-center justify-center transition-all shadow-md hover:scale-105 cursor-pointer flex-shrink-0"
+              >
+                {isPlayingAudio ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
+              </button>
+
+              {/* Title & Artist & Duration */}
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-1">
+                  <h4 className="text-xs sm:text-sm font-bold text-white truncate">
+                    {message.audioTitle || message.fileName || message.text || 'موزیک'}
+                  </h4>
+                  <span className="text-[10px] font-mono text-cyan-300 flex-shrink-0">
+                    {isPlayingAudio
+                      ? `0:${currentAudioTime.toString().padStart(2, '0')}`
+                      : `0:${message.voiceDuration?.toString().padStart(2, '0') || '00'}`}
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-300 truncate mt-0.5 flex items-center gap-1.5">
+                  <span>{message.audioPerformer || 'موزیک ارسالی'}</span>
+                  {message.fileSize && <span className="text-slate-500 text-[10px]">({message.fileSize})</span>}
+                </div>
+              </div>
+            </div>
+
+            {/* In-Call Action Bar for this song */}
+            {isGroupChat && onAddSongToCall && message.mediaUrl && (
+              <div className="flex items-center gap-1.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => handleQueueTrack(false)}
+                  className="flex-1 py-1.5 px-2.5 rounded-xl bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                  title="افزودن این آهنگ به صف پخش ویس‌کال گروه"
+                >
+                  <Music className="w-3 h-3" />
+                  <span>افزودن به نوبت کال</span>
+                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleQueueTrack(true)}
+                    className="py-1.5 px-3 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[11px] font-bold transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    title="پخش فوری این آهنگ در گفتگوی صوتی توسط مدیر"
+                  >
+                    <Radio className="w-3 h-3" />
+                    <span>پخش در کال</span>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* 3. Voice Note with Real HTMLAudioElement Playback */}
         {message.type === 'voice' && (
           <div className="space-y-2 py-1">
@@ -513,6 +638,32 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               <button className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors">
                 <Download className="w-4 h-4" />
               </button>
+            )}
+
+            {/* If audio document in group, allow queuing into call */}
+            {isGroupChat && onAddSongToCall && message.mediaUrl && message.fileName?.match(/\.(mp3|wav|m4a|ogg|aac|flac)$/i) && (
+              <div className="flex items-center gap-1.5 mr-auto">
+                <button
+                  type="button"
+                  onClick={() => handleQueueTrack(false)}
+                  className="py-1 px-2 rounded-lg bg-cyan-500/15 hover:bg-cyan-500/25 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
+                  title="افزودن این آهنگ به صف پخش ویس‌کال"
+                >
+                  <Music className="w-3 h-3" />
+                  <span>نوبت کال</span>
+                </button>
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => handleQueueTrack(true)}
+                    className="py-1 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
+                    title="پخش فوری در ویس‌کال توسط مدیر"
+                  >
+                    <Radio className="w-3 h-3" />
+                    <span>پخش در کال</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         )}

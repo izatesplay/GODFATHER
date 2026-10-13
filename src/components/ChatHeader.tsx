@@ -24,7 +24,9 @@ import {
   Info,
   Palette,
   UserX,
-  Trash2
+  Trash2,
+  Music,
+  Disc3
 } from 'lucide-react';
 import { GroupProfileModal } from './GroupProfileModal';
 import { getChatShareLink } from '../utils/linkHelper';
@@ -565,7 +567,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             {/* Pulsing Audio/Video Ring */}
             <div className="relative w-8 h-8 rounded-full bg-emerald-500/20 border border-emerald-400/50 flex items-center justify-center text-emerald-400 flex-shrink-0">
               <span className="absolute inset-0 rounded-full border border-emerald-400 animate-ping opacity-60" />
-              <Volume2 className="w-4 h-4 relative z-10" />
+              {chat.activeCall?.musicPlayer?.isPlaying ? (
+                <Disc3 className="w-4 h-4 relative z-10 text-cyan-300 animate-spin" style={{ animationDuration: '4s' }} />
+              ) : (
+                <Volume2 className="w-4 h-4 relative z-10" />
+              )}
             </div>
 
             <div className="min-w-0">
@@ -574,11 +580,27 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">
                   LIVE
                 </span>
+                {chat.activeCall?.musicPlayer?.isPlaying && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 flex items-center gap-1">
+                    <Music className="w-2.5 h-2.5" />
+                    <span className="hidden sm:inline">موسیقی فعال</span>
+                  </span>
+                )}
               </div>
               <div className="text-[11px] text-slate-300 flex items-center gap-2 mt-0.5 truncate">
-                <span>{chat.activeCall?.participantsCount || 1} حاضر در تماس</span>
-                <span className="text-slate-500">•</span>
-                <span className="text-cyan-300">شروع شده توسط {chat.activeCall?.startedByName || 'مدیر'}</span>
+                {chat.activeCall?.musicPlayer?.currentTrack && chat.activeCall.musicPlayer.isPlaying ? (
+                  <span className="text-cyan-300 font-medium truncate flex items-center gap-1">
+                    <span>🎵 در حال پخش:</span>
+                    <strong className="text-white">{chat.activeCall.musicPlayer.currentTrack.title}</strong>
+                    <span className="text-slate-400 text-[10px] hidden sm:inline">({chat.activeCall.musicPlayer.currentTrack.addedBy.name})</span>
+                  </span>
+                ) : (
+                  <>
+                    <span>{chat.activeCall?.participantsCount || 1} حاضر در تماس</span>
+                    <span className="text-slate-500">•</span>
+                    <span className="text-cyan-300">شروع شده توسط {chat.activeCall?.startedByName || 'مدیر'}</span>
+                  </>
+                )}
               </div>
             </div>
           </div>

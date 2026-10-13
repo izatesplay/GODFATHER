@@ -199,7 +199,26 @@ export const INITIAL_MESSAGES: Record<string, Message[]> = {
           seenAt: '۱۰:۲۰'
         }
       ],
-      timestamp: 'هم‌اکنون'
+      timestamp: '۱۰:۰۰'
+    },
+    {
+      id: 'msg_group_song_sara',
+      chatId: 'chat_godfather_group',
+      senderId: 'usr_member_sara',
+      senderName: 'سارا محمدی',
+      senderAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+      isOutgoing: false,
+      text: 'بچه‌ها این آهنگ قشنگ رو برای پخش توی گفتگوی صوتی گروه فرستادم 🎧',
+      type: 'audio',
+      audioTitle: 'موسیقی الکترونیک لایت (Synthwave Chill)',
+      audioPerformer: 'SoundHelix Orchestra',
+      fileName: 'SoundHelix-Song-1.mp3',
+      fileSize: '۶.۲ مگابایت',
+      voiceDuration: 372,
+      mediaUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+      reactions: [{ emoji: '🔥', count: 4 }, { emoji: '❤️', count: 2 }],
+      status: 'read',
+      timestamp: '۱۰:۰۵'
     }
   ],
   chat_saved: [

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Chat, Message, Story, User, MiniApp, Contact, ChatFolder, ChatMember } from './types/telegram';
+import { Chat, Message, Story, User, MiniApp, Contact, ChatFolder, ChatMember, CallMusicTrack } from './types/telegram';
 import { 
   ADMIN_USER,
   INITIAL_CHATS, 
@@ -473,7 +473,7 @@ export default function App() {
   // Handle Send Message
   const handleSendMessage = async (
     text: string,
-    type: 'text' | 'photo' | 'video' | 'voice' | 'round_video' | 'document' = 'text',
+    type: 'text' | 'photo' | 'video' | 'voice' | 'round_video' | 'document' | 'audio' = 'text',
     options?: {
       isSpoiler?: boolean;
       isSilent?: boolean;
@@ -481,6 +481,8 @@ export default function App() {
       fileName?: string;
       fileSize?: string;
       mediaUrl?: string;
+      audioTitle?: string;
+      audioPerformer?: string;
       voiceDuration?: number;
       voiceWaveform?: number[];
     }
@@ -505,7 +507,9 @@ export default function App() {
       fileName: options?.fileName,
       fileSize: options?.fileSize,
       mediaUrl: options?.mediaUrl,
-      voiceDuration: type === 'voice' ? (options?.voiceDuration || 5) : undefined,
+      audioTitle: options?.audioTitle,
+      audioPerformer: options?.audioPerformer,
+      voiceDuration: (type === 'voice' || type === 'audio') ? (options?.voiceDuration || (type === 'audio' ? 180 : 5)) : undefined,
       voiceWaveform: type === 'voice' ? (options?.voiceWaveform || [25, 45, 80, 60, 90, 70, 30, 60, 85, 40]) : undefined,
       isSpoiler: options?.isSpoiler,
       isSilent: options?.isSilent,
@@ -950,6 +954,238 @@ export default function App() {
     setIsCallOpen(false);
     setChats((prev) =>
       prev.map((c) => (c.id === activeChatId ? { ...c, activeCall: undefined } : c))
+    );
+  };
+
+  // ==============================================================
+  // GROUP & CHANNEL CALL MUSIC (DJ BOT) HANDLERS
+  // ==============================================================
+
+  // 1. Add song to call queue (Any member can suggest/add a track)
+  const handleAddSongToCallQueue = (track: CallMusicTrack, autoPlayIfAdmin = false) => {
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId) {
+          const currentCall = c.activeCall || {
+            isActive: true,
+            startedBy: currentUser.id,
+            startedByName: currentUser.name,
+            startedAt: 'هم‌اکنون',
+            participantsCount: 1,
+            participants: [
+              {
+                id: currentUser.id,
+                name: currentUser.name,
+                avatar: currentUser.avatar,
+                isSpeaking: false,
+                role: 'مدیر گروه'
+              }
+            ]
+          };
+
+          const currentMusic = currentCall.musicPlayer || {
+            isPlaying: false,
+            currentTrack: null,
+            queue: [],
+            volume: 0.8
+          };
+
+          const queue = [...currentMusic.queue];
+          const exists = queue.some((t) => t.id === track.id || (t.audioUrl && t.audioUrl === track.audioUrl));
+          if (!exists) {
+            queue.push(track);
+          }
+
+          const shouldAutoPlay = (autoPlayIfAdmin && isChatAdmin) || (!currentMusic.currentTrack && isChatAdmin);
+
+          return {
+            ...c,
+            activeCall: {
+              ...currentCall,
+              musicPlayer: {
+                ...currentMusic,
+                queue,
+                currentTrack: shouldAutoPlay ? track : (currentMusic.currentTrack || track),
+                isPlaying: shouldAutoPlay ? true : currentMusic.isPlaying
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 2. Play specific track in call (Admin only)
+  const handlePlayCallTrack = (track: CallMusicTrack) => {
+    if (!isChatAdmin) return;
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall) {
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...(c.activeCall.musicPlayer || { queue: [], volume: 0.8 }),
+                currentTrack: track,
+                isPlaying: true
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 3. Toggle Play / Pause in call (Admin only)
+  const handleToggleCallMusicPlay = () => {
+    if (!isChatAdmin) return;
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall?.musicPlayer) {
+          const player = c.activeCall.musicPlayer;
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...player,
+                isPlaying: !player.isPlaying
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 4. Remove song from queue (Admin only)
+  const handleRemoveCallTrack = (trackId: string) => {
+    if (!isChatAdmin) return;
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall?.musicPlayer) {
+          const player = c.activeCall.musicPlayer;
+          const updatedQueue = player.queue.filter((t) => t.id !== trackId);
+          const isCurrent = player.currentTrack?.id === trackId;
+          const nextTrack = isCurrent ? (updatedQueue[0] || null) : player.currentTrack;
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...player,
+                queue: updatedQueue,
+                currentTrack: nextTrack,
+                isPlaying: isCurrent ? Boolean(nextTrack) : player.isPlaying
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 5. Skip to next track in queue (Admin only)
+  const handleSkipNextCallMusic = () => {
+    if (!isChatAdmin) return;
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall?.musicPlayer) {
+          const player = c.activeCall.musicPlayer;
+          if (player.queue.length === 0) return c;
+          const currentIndex = player.queue.findIndex((t) => t.id === player.currentTrack?.id);
+          const nextIndex = currentIndex >= 0 && currentIndex + 1 < player.queue.length ? currentIndex + 1 : 0;
+          const nextTrack = player.queue[nextIndex] || player.currentTrack;
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...player,
+                currentTrack: nextTrack,
+                isPlaying: true
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 6. Skip to previous track in queue (Admin only)
+  const handleSkipPrevCallMusic = () => {
+    if (!isChatAdmin) return;
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall?.musicPlayer) {
+          const player = c.activeCall.musicPlayer;
+          if (player.queue.length === 0) return c;
+          const currentIndex = player.queue.findIndex((t) => t.id === player.currentTrack?.id);
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : player.queue.length - 1;
+          const prevTrack = player.queue[prevIndex] || player.currentTrack;
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...player,
+                currentTrack: prevTrack,
+                isPlaying: true
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 7. Set music volume
+  const handleSetCallMusicVolume = (volume: number) => {
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall?.musicPlayer) {
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...c.activeCall.musicPlayer,
+                volume
+              }
+            }
+          };
+        }
+        return c;
+      })
+    );
+  };
+
+  // 8. Toggle loop
+  const handleToggleCallMusicLoop = () => {
+    if (!isChatAdmin) return;
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId && c.activeCall?.musicPlayer) {
+          return {
+            ...c,
+            activeCall: {
+              ...c.activeCall,
+              musicPlayer: {
+                ...c.activeCall.musicPlayer,
+                isLooping: !c.activeCall.musicPlayer.isLooping
+              }
+            }
+          };
+        }
+        return c;
+      })
     );
   };
 
@@ -1565,6 +1801,9 @@ export default function App() {
                   prev.includes(id) ? prev : [...prev, id]
                 );
               }}
+              isCallActive={Boolean(activeChat.activeCall?.isActive)}
+              isAdmin={isChatAdmin}
+              onAddSongToCall={handleAddSongToCallQueue}
             />
           ))}
 
@@ -1653,6 +1892,16 @@ export default function App() {
         initialCallType={callType}
         currentUser={currentUser}
         chatMembers={activeChat.members}
+        musicState={activeChat.activeCall?.musicPlayer}
+        onToggleMusicPlay={handleToggleCallMusicPlay}
+        onPlayMusicTrack={handlePlayCallTrack}
+        onRemoveMusicTrack={handleRemoveCallTrack}
+        onAddMusicTrack={handleAddSongToCallQueue}
+        onSkipNextMusic={handleSkipNextCallMusic}
+        onSkipPrevMusic={handleSkipPrevCallMusic}
+        onSetMusicVolume={handleSetCallMusicVolume}
+        onToggleMusicLoop={handleToggleCallMusicLoop}
+        groupMessages={currentChatMessages}
       />
 
       {/* 5. Telegram Story Viewer */}

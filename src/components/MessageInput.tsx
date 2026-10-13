@@ -15,7 +15,8 @@ import {
   Check,
   Trash2,
   AlertCircle,
-  CornerUpLeft
+  CornerUpLeft,
+  Music
 } from 'lucide-react';
 import { Message } from '../types/telegram';
 import { RoundVideoRecorderModal } from './RoundVideoRecorderModal';
@@ -23,7 +24,7 @@ import { RoundVideoRecorderModal } from './RoundVideoRecorderModal';
 interface MessageInputProps {
   onSendMessage: (
     text: string, 
-    type?: 'text' | 'photo' | 'video' | 'voice' | 'round_video' | 'document',
+    type?: 'text' | 'photo' | 'video' | 'voice' | 'round_video' | 'document' | 'audio',
     options?: {
       isSpoiler?: boolean;
       isSilent?: boolean;
@@ -31,6 +32,8 @@ interface MessageInputProps {
       fileName?: string;
       fileSize?: string;
       mediaUrl?: string;
+      audioTitle?: string;
+      audioPerformer?: string;
       voiceDuration?: number;
       voiceWaveform?: number[];
     }
@@ -86,6 +89,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mediaFileInputRef = useRef<HTMLInputElement>(null);
   const documentFileInputRef = useRef<HTMLInputElement>(null);
+  const audioFileInputRef = useRef<HTMLInputElement>(null);
 
   // MediaRecorder refs
   const audioStreamRef = useRef<MediaStream | null>(null);
@@ -127,6 +131,28 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           fileName: file.name,
           fileSize: formatBytes(file.size),
           mediaUrl: typeof reader.result === 'string' ? reader.result : undefined
+        });
+      };
+      reader.readAsDataURL(file);
+    });
+    e.target.value = '';
+    setShowAttachMenu(false);
+  };
+
+  const handleAudioFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
+        onSendMessage(cleanTitle, 'audio', {
+          fileName: file.name,
+          audioTitle: cleanTitle,
+          audioPerformer: 'موزیک ارسالی',
+          fileSize: formatBytes(file.size),
+          mediaUrl: typeof reader.result === 'string' ? reader.result : undefined,
+          voiceDuration: 180
         });
       };
       reader.readAsDataURL(file);
@@ -348,6 +374,14 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         onChange={handleDocumentFilesSelected}
         className="hidden"
       />
+      <input
+        type="file"
+        ref={audioFileInputRef}
+        accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+        multiple
+        onChange={handleAudioFilesSelected}
+        className="hidden"
+      />
 
       {/* Telegram Native Reply Preview Bar */}
       {replyingTo && (
@@ -445,6 +479,28 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                     </span>
                   </div>
                   <div className="text-[10px] text-slate-400">پروتکل TUS با قابلیت مکث و ادامه</div>
+                </div>
+              </button>
+
+              {/* Option: Music & Audio File for Group Chat & Call */}
+              <button
+                onClick={() => {
+                  setShowAttachMenu(false);
+                  audioFileInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-2.5 p-2 rounded-xl hover:bg-slate-800 text-xs text-white transition-colors text-right cursor-pointer"
+              >
+                <div className="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                  <Music className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="font-bold flex items-center gap-1.5">
+                    <span>ارسال فایل آهنگ و موسیقی</span>
+                    <span className="text-[9px] bg-cyan-500/20 text-cyan-300 px-1.5 py-0.2 rounded font-mono">
+                      پخش در کال
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400">MP3، WAV، M4A با قابلیت پخش مستقیم در ویس‌کال گروه</div>
                 </div>
               </button>
 

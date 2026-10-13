@@ -61,10 +61,12 @@ export interface Message {
   senderAvatar: string;
   isOutgoing: boolean;
   text: string;
-  type: 'text' | 'photo' | 'video' | 'voice' | 'round_video' | 'document' | 'poll' | 'system';
+  type: 'text' | 'photo' | 'video' | 'voice' | 'round_video' | 'document' | 'poll' | 'system' | 'audio';
   mediaUrl?: string;
   fileName?: string;
   fileSize?: string;
+  audioTitle?: string;
+  audioPerformer?: string;
   voiceDuration?: number; // in seconds
   voiceWaveform?: number[];
   transcript?: string;
@@ -89,6 +91,32 @@ export interface Message {
   timestamp: string;
   selfDestructIn?: number; // seconds remaining in secret chat
   deletedForUserIds?: string[]; // IDs of users who deleted this message for themselves only
+}
+
+export interface CallMusicTrack {
+  id: string;
+  title: string;
+  artist?: string;
+  audioUrl: string;
+  duration?: number; // seconds
+  addedBy: {
+    id: string;
+    name: string;
+    avatar?: string;
+  };
+  addedAt: string;
+  fileSize?: string;
+  coverUrl?: string;
+  sourceMessageId?: string;
+}
+
+export interface CallMusicPlayerState {
+  isPlaying: boolean;
+  currentTrack?: CallMusicTrack | null;
+  queue: CallMusicTrack[];
+  volume?: number;
+  currentTime?: number;
+  isLooping?: boolean;
 }
 
 export interface Chat {
@@ -139,6 +167,7 @@ export interface Chat {
       isMuted?: boolean;
       role?: string;
     }[];
+    musicPlayer?: CallMusicPlayerState;
   };
   members?: ChatMember[];
 }

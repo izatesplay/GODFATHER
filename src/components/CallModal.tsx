@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ChatType, User, ChatMember } from '../types/telegram';
+import { ChatType, User, ChatMember, CallMusicTrack, CallMusicPlayerState, Message } from '../types/telegram';
 import { 
   Mic, 
   MicOff, 
@@ -19,8 +19,14 @@ import {
   Maximize2, 
   Minimize2,
   Plus,
-  UserPlus
+  UserPlus,
+  Music,
+  Disc3,
+  Play,
+  Pause,
+  SkipForward
 } from 'lucide-react';
+import { CallMusicPlayerModal } from './CallMusicPlayerModal';
 
 export interface CallParticipant {
   id: string;
@@ -48,6 +54,18 @@ interface CallModalProps {
   initialCallType?: 'audio' | 'video';
   currentUser?: User;
   chatMembers?: ChatMember[];
+  // Music Player props
+  musicState?: CallMusicPlayerState;
+  onToggleMusicPlay?: () => void;
+  onPlayMusicTrack?: (track: CallMusicTrack) => void;
+  onRemoveMusicTrack?: (trackId: string) => void;
+  onAddMusicTrack?: (track: CallMusicTrack, autoPlayIfAdmin?: boolean) => void;
+  onSkipNextMusic?: () => void;
+  onSkipPrevMusic?: () => void;
+  onSetMusicVolume?: (vol: number) => void;
+  onSeekMusic?: (secs: number) => void;
+  onToggleMusicLoop?: () => void;
+  groupMessages?: Message[];
 }
 
 // لیست شرکت‌کنندگان پیش‌فرض تلگرام برای سناریوی ۱۰ نفره زنده
@@ -156,7 +174,18 @@ export const CallModal: React.FC<CallModalProps> = ({
   onEndCallForEveryone,
   activeParticipants = [],
   initialCallType = 'audio',
-  currentUser
+  currentUser,
+  musicState,
+  onToggleMusicPlay,
+  onPlayMusicTrack,
+  onRemoveMusicTrack,
+  onAddMusicTrack,
+  onSkipNextMusic,
+  onSkipPrevMusic,
+  onSetMusicVolume,
+  onSeekMusic,
+  onToggleMusicLoop,
+  groupMessages = []
 }) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(initialCallType === 'audio');
@@ -167,6 +196,9 @@ export const CallModal: React.FC<CallModalProps> = ({
   const [showEndConfirm, setShowEndConfirm] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [cameraError, setCameraError] = useState(false);
+  const [showMusicModal, setShowMusicModal] = useState(false);
+  const [musicCurrentTime, setMusicCurrentTime] = useState(0);
+  const [musicDuration, setMusicDuration] = useState(0);
 
   // تعداد اعضای شبیه‌سازی‌شده (از ۱ تا ۱۰ نفر) برای تست و ریسپانسیو کامل
   const [participantLimit, setParticipantLimit] = useState(10);
@@ -174,8 +206,43 @@ export const CallModal: React.FC<CallModalProps> = ({
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const screenStreamRef = useRef<MediaStream | null>(null);
+  const callAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const isGroupVoiceChat = chatType === 'group' || chatType === 'supergroup' || chatType === 'channel';
+
+  const isMusicPlaying = Boolean(musicState?.isPlaying && musicState?.currentTrack);
+  const currentMusicTrack = musicState?.currentTrack || null;
+  const musicQueue = musicState?.queue || [];
+  const musicVolume = musicState?.volume ?? 0.8;
+  const isMusicLooping = Boolean(musicState?.isLooping);
+
+  // Sync actual HTML5 Audio element with music state
+  useEffect(() => {
+    if (!callAudioRef.current) return;
+    callAudioRef.current.volume = musicVolume;
+  }, [musicVolume]);
+
+  useEffect(() => {
+    if (!callAudioRef.current) return;
+    if (isMusicPlaying && currentMusicTrack?.audioUrl) {
+      if (callAudioRef.current.src !== currentMusicTrack.audioUrl) {
+        callAudioRef.current.src = currentMusicTrack.audioUrl;
+      }
+      callAudioRef.current.play().catch((err) => {
+        console.warn('Call audio autoplay blocked:', err);
+      });
+    } else {
+      callAudioRef.current.pause();
+    }
+  }, [isMusicPlaying, currentMusicTrack?.audioUrl]);
+
+  const handleSeekMusic = (secs: number) => {
+    if (callAudioRef.current) {
+      callAudioRef.current.currentTime = secs;
+      setMusicCurrentTime(secs);
+    }
+    onSeekMusic?.(secs);
+  };
 
   // مدت زمان تماس و مقداردهی اولیه
   useEffect(() => {
@@ -391,6 +458,26 @@ export const CallModal: React.FC<CallModalProps> = ({
               </button>
             )}
 
+            {/* Music DJ Player Trigger */}
+            {isGroupVoiceChat && (
+              <button
+                type="button"
+                onClick={() => setShowMusicModal(true)}
+                className={`p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl border transition-all cursor-pointer text-xs flex items-center gap-1.5 ${
+                  isMusicPlaying
+                    ? 'bg-gradient-to-r from-cyan-500/20 to-indigo-500/20 border-cyan-400/50 text-cyan-300 ring-1 ring-cyan-400/40 shadow-sm'
+                    : 'bg-slate-800/80 border-slate-700 text-slate-300 hover:text-white hover:bg-slate-700'
+                }`}
+                title="پخش‌کننده موسیقی در کال (DJ)"
+              >
+                <Music className={`w-3.5 h-3.5 ${isMusicPlaying ? 'text-cyan-400 animate-pulse' : 'text-slate-400'}`} />
+                <span className="hidden sm:inline">موسیقی کال</span>
+                {isMusicPlaying && (
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping mr-0.5" />
+                )}
+              </button>
+            )}
+
             {/* Invite Button */}
             <button
               onClick={() => {
@@ -415,6 +502,65 @@ export const CallModal: React.FC<CallModalProps> = ({
             </button>
           </div>
         </div>
+
+        {/* ==============================================================
+            FLOATING LIVE MUSIC BAR (When song is playing or loaded)
+           ============================================================== */}
+        {isGroupVoiceChat && currentMusicTrack && (
+          <div 
+            onClick={() => setShowMusicModal(true)}
+            className="relative z-20 px-3 sm:px-5 py-1.5 bg-gradient-to-r from-cyan-950/90 via-slate-900/90 to-indigo-950/90 border-b border-cyan-500/30 flex items-center justify-between text-xs cursor-pointer hover:bg-black/40 transition-colors shadow-md flex-shrink-0 select-none group"
+            title="مشاهده پنل کامل موسیقی کال"
+          >
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-6 h-6 rounded-lg bg-cyan-500/20 text-cyan-300 flex items-center justify-center flex-shrink-0">
+                <Disc3 className={`w-4 h-4 ${isMusicPlaying ? 'animate-spin' : ''}`} style={{ animationDuration: '4s' }} />
+              </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[11px] text-cyan-400 font-bold flex-shrink-0">
+                  {isMusicPlaying ? 'در حال پخش:' : 'آهنگ کال:'}
+                </span>
+                <span className="font-extrabold text-white text-xs truncate max-w-[180px] sm:max-w-xs">
+                  {currentMusicTrack.title}
+                </span>
+                <span className="text-slate-500 hidden sm:inline">•</span>
+                <span className="text-[11px] text-slate-300 hidden sm:inline truncate">
+                  ارسال شده توسط {currentMusicTrack.addedBy.name}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0 mr-2">
+              {/* Sound wave bars */}
+              {isMusicPlaying && (
+                <div className="flex items-center gap-0.5 h-3 mr-1">
+                  <span className="w-0.5 h-full bg-cyan-400 animate-pulse" />
+                  <span className="w-0.5 h-2 bg-emerald-400 animate-pulse delay-75" />
+                  <span className="w-0.5 h-3 bg-cyan-400 animate-pulse delay-150" />
+                </div>
+              )}
+
+              {/* Admin Play/Pause Quick Control */}
+              {isAdmin && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleMusicPlay?.();
+                  }}
+                  className="p-1 rounded-lg bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 hover:text-white transition-colors cursor-pointer"
+                  title={isMusicPlaying ? 'توقف پخش' : 'ادامه پخش'}
+                >
+                  {isMusicPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5 ml-0.5" />}
+                </button>
+              )}
+
+              <span className="text-[10px] text-cyan-400 underline group-hover:text-cyan-300 font-bold">
+                پنل DJ
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* ==============================================================
             CENTER VIDEO GRID (Telegram Web K & A Call Architecture)
@@ -589,7 +735,26 @@ export const CallModal: React.FC<CallModalProps> = ({
             </button>
           )}
 
-          {/* 5. Leave Call (Without closing for others) */}
+          {/* 5. Music DJ studio button */}
+          {isGroupVoiceChat && (
+            <button
+              type="button"
+              onClick={() => setShowMusicModal(true)}
+              className={`p-2.5 sm:px-3.5 sm:py-2.5 rounded-2xl flex items-center gap-1.5 transition-all cursor-pointer shadow-lg ${
+                isMusicPlaying
+                  ? 'bg-gradient-to-r from-cyan-500 to-indigo-600 text-white shadow-cyan-500/30 ring-2 ring-cyan-300/40 animate-pulse'
+                  : 'bg-slate-800 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
+              }`}
+              title="پخش‌کننده موسیقی در کال (ارسال و پخش آهنگ)"
+            >
+              <Music className={`w-4 h-4 sm:w-5 sm:h-5 ${isMusicPlaying ? 'text-white' : 'text-cyan-400'}`} />
+              <span className="text-xs font-bold hidden sm:inline">
+                {isMusicPlaying ? 'موسیقی زنده' : 'موسیقی کال'}
+              </span>
+            </button>
+          )}
+
+          {/* 6. Leave Call (Without closing for others) */}
           <button
             onClick={handleLeave}
             className="px-3 sm:px-4 py-2.5 rounded-2xl bg-slate-700 hover:bg-slate-600 text-white flex items-center gap-1.5 shadow-lg transition-all cursor-pointer border border-slate-600"
@@ -599,7 +764,7 @@ export const CallModal: React.FC<CallModalProps> = ({
             <span className="text-xs font-bold">ترک تماس</span>
           </button>
 
-          {/* 6. Admin End Call For Everyone */}
+          {/* 7. Admin End Call For Everyone */}
           {isGroupVoiceChat ? (
             isAdmin ? (
               <button
@@ -622,6 +787,57 @@ export const CallModal: React.FC<CallModalProps> = ({
             </button>
           )}
         </div>
+
+        {/* ==============================================================
+            In-Call Music Audio Element (Streaming sound in group call)
+           ============================================================== */}
+        <audio
+          ref={callAudioRef}
+          src={currentMusicTrack?.audioUrl}
+          onTimeUpdate={() => {
+            if (callAudioRef.current) {
+              setMusicCurrentTime(callAudioRef.current.currentTime);
+              setMusicDuration(callAudioRef.current.duration || currentMusicTrack?.duration || 0);
+            }
+          }}
+          onEnded={() => {
+            if (isMusicLooping && callAudioRef.current) {
+              callAudioRef.current.currentTime = 0;
+              callAudioRef.current.play().catch(() => {});
+            } else {
+              onSkipNextMusic?.();
+            }
+          }}
+        />
+
+        {/* ==============================================================
+            In-Call DJ Music Studio Modal
+           ============================================================== */}
+        {isGroupVoiceChat && (
+          <CallMusicPlayerModal
+            isOpen={showMusicModal}
+            onClose={() => setShowMusicModal(false)}
+            isAdmin={isAdmin}
+            currentUser={currentUser || { id: 'usr_me', name: 'شما', username: 'me', phone: '', avatar: callerAvatar, isPremium: false, customColor: 'cyan', lastSeen: '', isOnline: true }}
+            currentTrack={currentMusicTrack}
+            queue={musicQueue}
+            isPlaying={isMusicPlaying}
+            currentTime={musicCurrentTime}
+            duration={musicDuration}
+            volume={musicVolume}
+            isLooping={isMusicLooping}
+            onTogglePlay={() => onToggleMusicPlay?.()}
+            onSeek={handleSeekMusic}
+            onSkipNext={() => onSkipNextMusic?.()}
+            onSkipPrev={() => onSkipPrevMusic?.()}
+            onSetVolume={(vol) => onSetMusicVolume?.(vol)}
+            onToggleLoop={() => onToggleMusicLoop?.()}
+            onPlayTrack={(track) => onPlayMusicTrack?.(track)}
+            onRemoveTrack={(id) => onRemoveMusicTrack?.(id)}
+            onAddTrack={(track, autoPlay) => onAddMusicTrack?.(track, autoPlay)}
+            groupMessages={groupMessages}
+          />
+        )}
 
         {/* ==============================================================
             CONFIRMATION MODAL: End Call For Everyone (Admin Only)
