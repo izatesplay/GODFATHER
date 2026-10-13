@@ -22,8 +22,11 @@ import { translateText } from './utils/translator';
 import { Sidebar } from './components/Sidebar';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatSearchBar } from './components/ChatSearchBar';
+import { PinnedMessageBar } from './components/PinnedMessageBar';
 import { MessageItem } from './components/MessageItem';
 import { MessageInput } from './components/MessageInput';
+import { ChatWallpaper } from './types/telegram';
+import { DEFAULT_WALLPAPER } from './data/wallpapers';
 import { CallModal } from './components/CallModal';
 import { StoryViewer } from './components/StoryViewer';
 import { StoryCreatorModal } from './components/StoryCreatorModal';
@@ -35,7 +38,11 @@ import { ArchitectureModal } from './components/ArchitectureModal';
 import { AdminPanelModal } from './components/AdminPanelModal';
 import { AuthModal } from './components/AuthModal';
 import { PwaInstallModal } from './components/PwaInstallModal';
-import { ShieldCheck, Sparkles, Crown } from 'lucide-react';
+import { ForwardMessageModal } from './components/ForwardMessageModal';
+import { DeleteMessageModal } from './components/DeleteMessageModal';
+import { parseDeepLinkParams } from './utils/linkHelper';
+import { getSenderFriendlyName } from './utils/senderHelper';
+import { ShieldCheck, Sparkles, Crown, ShieldAlert, UserX, X, Share2, Trash2 } from 'lucide-react';
 
 const getInitialState = <T,>(key: string, defaultValue: T): T => {
   try {
@@ -88,6 +95,10 @@ export default function App() {
   });
   const [miniApps] = useState<MiniApp[]>(INITIAL_MINI_APPS);
   const [userStars, setUserStars] = useState<number>(() => currentUser?.starsBalance || 50000);
+  const [chatWallpaper, setChatWallpaper] = useState<ChatWallpaper>(() => {
+    const saved = getInitialState<ChatWallpaper>('chat_wallpaper', DEFAULT_WALLPAPER);
+    return (saved && saved.value) ? saved : DEFAULT_WALLPAPER;
+  });
 
   // PWA / Web2App install state
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<any>(null);
@@ -123,7 +134,7 @@ export default function App() {
   // Interactive Modals
   const [isArchitectureOpen, setIsArchitectureOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [settingsInitialSection, setSettingsInitialSection] = useState<'main' | 'edit_profile'>('main');
+  const [settingsInitialSection, setSettingsInitialSection] = useState<any>('main');
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [isAuthOpen, setIsAuthOpen] = useState(false);
   const [isCallOpen, setIsCallOpen] = useState(false);
@@ -143,12 +154,26 @@ export default function App() {
   const [mobileView, setMobileView] = useState<'sidebar' | 'chat'>('sidebar');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [forwardingMessages, setForwardingMessages] = useState<Message[] | null>(null);
+  const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
+  const [deleteModalMessages, setDeleteModalMessages] = useState<Message[] | null>(null);
+
+  // Clear message selection whenever active chat switches
+  useEffect(() => {
+    setSelectedMessageIds([]);
+  }, [activeChatId]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const activeChat: Chat =
     (chats && chats.length > 0 ? (chats.find((c) => c.id === activeChatId) || chats[0]) : null) ||
     INITIAL_CHATS[0];
+
+  const isCurrentChatBlocked = Boolean(
+    activeChat?.isBlocked ||
+    (currentUser?.blockedUserIds && currentUser.blockedUserIds.includes(activeChat?.id))
+  );
+
   const isSuperAdmin = currentUser?.phone === '09921758505' || currentUser?.role === 'superadmin' || currentUser?.username === 'izatesplay';
 
   // The creator of the group is ALWAYS the Owner & Manager
@@ -173,12 +198,67 @@ export default function App() {
   ));
 
   const isChatAdmin = isSuperAdmin || isChatOwner || isAssignedAdmin || activeChat?.isUserAdmin === true;
-  const currentChatMessages = (activeChat?.id && messages && messages[activeChat.id]) ? messages[activeChat.id] : [];
+
+  // Filter out messages that the user deleted for themselves only
+  const deletedForMeIds: string[] = (() => {
+    try {
+      return JSON.parse(localStorage.getItem('cp_deleted_for_me_message_ids') || '[]');
+    } catch {
+      return [];
+    }
+  })();
+
+  const rawChatMessages = (activeChat?.id && messages && messages[activeChat.id]) ? messages[activeChat.id] : [];
+  const currentChatMessages = rawChatMessages.filter(
+    (m) =>
+      !m.deletedForUserIds?.includes(currentUser.id) &&
+      !deletedForMeIds.includes(m.id)
+  );
+
+  // Pinned messages for the active chat
+  const pinnedMessages = currentChatMessages.filter((m) => m.isPinned);
 
   // Filter messages by topic if in a supergroup forum
   const displayedMessages = activeChat?.activeTopicId
     ? currentChatMessages.filter((m) => !m.topicId || m.topicId === activeChat.activeTopicId)
     : currentChatMessages;
+
+  // Pin & Unpin message handler for admins and private chats
+  const handleTogglePinMessage = (messageId: string) => {
+    setMessages((prev) => {
+      const chatMsgs = prev[activeChatId] || [];
+      const updated = chatMsgs.map((m) => {
+        if (m.id === messageId) {
+          const newPinned = !m.isPinned;
+          return {
+            ...m,
+            isPinned: newPinned,
+            pinnedAt: newPinned ? new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }) : undefined
+          };
+        }
+        return m;
+      });
+      return { ...prev, [activeChatId]: updated };
+    });
+
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId) {
+          const existingPins = c.pinnedMessageIds || [];
+          const isNowPinned = !existingPins.includes(messageId);
+          const newPins = isNowPinned
+            ? [messageId, ...existingPins]
+            : existingPins.filter((id) => id !== messageId);
+          return { ...c, pinnedMessageIds: newPins };
+        }
+        return c;
+      })
+    );
+  };
+
+  const handleUnpinMessage = (messageId: string) => {
+    handleTogglePinMessage(messageId);
+  };
 
   // Scroll to bottom on new messages
   useEffect(() => {
@@ -215,6 +295,68 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  // Deep linking: Automatically handle incoming links from any domain (?join=, ?c=, ?u=)
+  useEffect(() => {
+    const { chatId, channelUsername, username } = parseDeepLinkParams();
+    if (!chatId && !channelUsername && !username) return;
+
+    if (chatId) {
+      const match = chats.find((c) => c.id === chatId);
+      if (match) {
+        setActiveChatId(match.id);
+        setMobileView('chat');
+      } else {
+        const defaultMatch = INITIAL_CHATS.find((c) => c.id === chatId);
+        if (defaultMatch) {
+          setChats((prev) => [defaultMatch, ...prev.filter((c) => c.id !== defaultMatch.id)]);
+          setActiveChatId(defaultMatch.id);
+          setMobileView('chat');
+        }
+      }
+    } else if (channelUsername) {
+      const clean = channelUsername.toLowerCase().replace(/^@+/, '');
+      const match = chats.find((c) => c.username?.toLowerCase().replace(/^@+/, '') === clean);
+      if (match) {
+        setActiveChatId(match.id);
+        setMobileView('chat');
+      }
+    } else if (username) {
+      const clean = username.toLowerCase().replace(/^@+/, '');
+      const matchedUser = usersList.find(
+        (u) => u.username?.toLowerCase().replace(/^@+/, '') === clean || u.phone === clean
+      );
+      if (matchedUser) {
+        const existingChat = chats.find(
+          (c) => c.title.toLowerCase() === matchedUser.name.toLowerCase() || c.id === `chat_${matchedUser.id}`
+        );
+        if (existingChat) {
+          setActiveChatId(existingChat.id);
+          setMobileView('chat');
+        } else {
+          const newChat: Chat = {
+            id: `chat_${matchedUser.id}`,
+            type: 'private',
+            title: matchedUser.name,
+            avatar: matchedUser.avatar,
+            username: matchedUser.username,
+            unreadCount: 0,
+            isPinned: false,
+            isMuted: false,
+            lastMessage: {
+              text: 'شروع گفتگو',
+              timestamp: 'هم‌اکنون',
+              isOutgoing: true,
+              status: 'read'
+            }
+          };
+          setChats((prev) => [newChat, ...prev]);
+          setActiveChatId(newChat.id);
+          setMobileView('chat');
+        }
+      }
+    }
+  }, [chats.length, usersList.length]);
+
   // Auto-save local changes to localStorage
   useEffect(() => {
     try {
@@ -225,10 +367,11 @@ export default function App() {
       localStorage.setItem('cp_stories', JSON.stringify(stories));
       localStorage.setItem('cp_contacts', JSON.stringify(contacts));
       localStorage.setItem('cp_folders', JSON.stringify(folders));
+      localStorage.setItem('cp_chat_wallpaper', JSON.stringify(chatWallpaper));
     } catch (e) {
       console.warn('LocalStorage error:', e);
     }
-  }, [currentUser, usersList, chats, messages, stories, contacts, folders]);
+  }, [currentUser, usersList, chats, messages, stories, contacts, folders, chatWallpaper]);
 
   // Initial bidirectional sync with api.php
   useEffect(() => {
@@ -254,15 +397,30 @@ export default function App() {
                   activeCall: rem.activeCall || local.activeCall
                 };
               });
+              const deletedIds: string[] = JSON.parse(localStorage.getItem('cp_deleted_chat_ids') || '[]');
               for (const rc of remote.data!.chats) {
-                if (!prev.some(p => p.id === rc.id)) {
+                if (!prev.some(p => p.id === rc.id) && !deletedIds.includes(rc.id)) {
                   updated.push(rc);
                 }
               }
               return updated;
             });
           }
-          if (remote.data.messages && Object.keys(remote.data.messages).length) setMessages(remote.data.messages);
+          if (remote.data.messages && Object.keys(remote.data.messages).length) {
+            setMessages((prev) => {
+              const merged = { ...prev };
+              for (const [cId, remoteList] of Object.entries(remote.data!.messages)) {
+                if (!merged[cId] || merged[cId].length === 0) {
+                  merged[cId] = remoteList;
+                } else {
+                  const localSet = new Set(merged[cId].map((m) => m.id));
+                  const nonDuplicates = remoteList.filter((m) => !localSet.has(m.id));
+                  merged[cId] = [...merged[cId], ...nonDuplicates];
+                }
+              }
+              return merged;
+            });
+          }
           if (remote.data.contacts?.length) setContacts(remote.data.contacts);
           if (remote.data.stories?.length) setStories(remote.data.stories);
           if (remote.data.folders?.length) setFolders(remote.data.folders);
@@ -327,6 +485,9 @@ export default function App() {
       voiceWaveform?: number[];
     }
   ) => {
+    if (isCurrentChatBlocked) {
+      return;
+    }
     const newMessageId = `msg_${Date.now()}`;
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
@@ -365,6 +526,36 @@ export default function App() {
       ...prev,
       [activeChatId]: [...(prev[activeChatId] || []), newMsg]
     }));
+
+    // Group chats: Simulate real group members reading the message (Seen-by status)
+    if (activeChat.type === 'group' || activeChat.type === 'supergroup') {
+      const otherMembers = (activeChat.members || []).filter(
+        (m) => m.id !== currentUser.id && m.phone !== currentUser.phone && m.username !== currentUser.username
+      );
+      if (otherMembers.length > 0) {
+        setTimeout(() => {
+          const readersCount = Math.min(otherMembers.length, 3);
+          const readers = otherMembers.slice(0, readersCount).map((m) => ({
+            id: m.id,
+            name: m.name,
+            avatar: m.avatar,
+            username: m.username,
+            role: m.role,
+            seenAt: timeStr
+          }));
+
+          setMessages((prev) => {
+            const msgs = prev[activeChatId] || [];
+            return {
+              ...prev,
+              [activeChatId]: msgs.map((m) =>
+                m.id === newMessageId ? { ...m, seenBy: readers } : m
+              )
+            };
+          });
+        }, 1800);
+      }
+    }
 
     // Live Real-Time Translation if active
     if (isTranslatingChat && text) {
@@ -576,12 +767,76 @@ export default function App() {
     });
   };
 
-  // Delete message for everyone
+  // Open delete modal for a specific message
   const handleDeleteMessage = (messageId: string) => {
+    const target = (messages[activeChatId] || []).find((m) => m.id === messageId);
+    if (target) {
+      setDeleteModalMessages([target]);
+    }
+  };
+
+  // 1. Delete messages for everyone / both sides (دو طرفه)
+  const handleConfirmDeleteForEveryone = () => {
+    if (!deleteModalMessages || deleteModalMessages.length === 0) return;
+    const idsToDelete = new Set(deleteModalMessages.map((m) => m.id));
+
     setMessages((prev) => ({
       ...prev,
-      [activeChatId]: (prev[activeChatId] || []).filter((m) => m.id !== messageId)
+      [activeChatId]: (prev[activeChatId] || []).filter((m) => !idsToDelete.has(m.id))
     }));
+
+    // Update active chat's last message if deleted message was the last one
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === activeChatId) {
+          const remaining = (messages[activeChatId] || []).filter((m) => !idsToDelete.has(m.id));
+          const lastRemaining = remaining[remaining.length - 1];
+          return {
+            ...c,
+            lastMessage: lastRemaining
+              ? {
+                  text: lastRemaining.text || (lastRemaining.type === 'photo' ? '📷 عکس' : '📎 فایل'),
+                  timestamp: lastRemaining.timestamp,
+                  isOutgoing: lastRemaining.isOutgoing,
+                  status: lastRemaining.status
+                }
+              : undefined
+          };
+        }
+        return c;
+      })
+    );
+
+    setSelectedMessageIds((prev) => prev.filter((id) => !idsToDelete.has(id)));
+    setDeleteModalMessages(null);
+  };
+
+  // 2. Delete messages only for me (یک طرفه)
+  const handleConfirmDeleteForMeOnly = () => {
+    if (!deleteModalMessages || deleteModalMessages.length === 0) return;
+    const idsToDelete = new Set(deleteModalMessages.map((m) => m.id));
+
+    try {
+      const stored: string[] = JSON.parse(localStorage.getItem('cp_deleted_for_me_message_ids') || '[]');
+      const updated = Array.from(new Set([...stored, ...Array.from(idsToDelete)]));
+      localStorage.setItem('cp_deleted_for_me_message_ids', JSON.stringify(updated));
+    } catch (_) {}
+
+    setMessages((prev) => ({
+      ...prev,
+      [activeChatId]: (prev[activeChatId] || []).map((m) => {
+        if (idsToDelete.has(m.id)) {
+          return {
+            ...m,
+            deletedForUserIds: [...(m.deletedForUserIds || []), currentUser.id]
+          };
+        }
+        return m;
+      })
+    }));
+
+    setSelectedMessageIds((prev) => prev.filter((id) => !idsToDelete.has(id)));
+    setDeleteModalMessages(null);
   };
 
   // Start Audio/Video Call (Group, Channel or 1-on-1)
@@ -881,7 +1136,7 @@ export default function App() {
         id: `broadcast_${Date.now()}_${targetId}`,
         chatId: targetId,
         senderId: currentUser.id,
-        senderName: `${currentUser.name} (09921758505)`,
+        senderName: currentUser.name,
         senderAvatar: currentUser.avatar,
         isOutgoing: false,
         text: broadcastText,
@@ -910,6 +1165,159 @@ export default function App() {
     if (user.starsBalance) {
       setUserStars(user.starsBalance);
     }
+  };
+
+  // Delete chat permanently (ensuring chats remain persistent until explicitly deleted)
+  const handleDeleteChat = (chatId: string) => {
+    try {
+      const deletedIds: string[] = JSON.parse(localStorage.getItem('cp_deleted_chat_ids') || '[]');
+      if (!deletedIds.includes(chatId)) {
+        deletedIds.push(chatId);
+        localStorage.setItem('cp_deleted_chat_ids', JSON.stringify(deletedIds));
+      }
+    } catch (e) {
+      console.warn('Error saving deleted chat id', e);
+    }
+
+    setChats((prev) => {
+      const remaining = prev.filter((c) => c.id !== chatId);
+      return remaining.length > 0 ? remaining : [INITIAL_CHATS[0]];
+    });
+    setMessages((prev) => {
+      const copy = { ...prev };
+      delete copy[chatId];
+      return copy;
+    });
+    if (activeChatId === chatId) {
+      const nextChat = chats.find((c) => c.id !== chatId) || INITIAL_CHATS[0];
+      setActiveChatId(nextChat.id);
+    }
+  };
+
+  // Clear chat history
+  const handleClearChatHistory = (chatId: string) => {
+    setMessages((prev) => ({
+      ...prev,
+      [chatId]: []
+    }));
+    setChats((prev) =>
+      prev.map((c) => (c.id === chatId ? { ...c, lastMessage: undefined, draft: undefined } : c))
+    );
+  };
+
+  // Pin/Unpin chat in sidebar list
+  const handleTogglePinChat = (chatId: string) => {
+    setChats((prev) => {
+      const updated = prev.map((c) => (c.id === chatId ? { ...c, isPinned: !c.isPinned } : c));
+      return [...updated].sort((a, b) => (b.isPinned ? 1 : 0) - (a.isPinned ? 1 : 0));
+    });
+  };
+
+  // Mute/Unmute chat
+  const handleToggleMuteChat = (chatId: string) => {
+    setChats((prev) =>
+      prev.map((c) => (c.id === chatId ? { ...c, isMuted: !c.isMuted } : c))
+    );
+  };
+
+  // Block/Unblock user
+  const handleToggleBlockUser = (userIdOrChatId: string, userName?: string) => {
+    const currentBlocked = currentUser.blockedUserIds || [];
+    const isCurrentlyBlocked = currentBlocked.includes(userIdOrChatId);
+    const updatedBlocked = isCurrentlyBlocked
+      ? currentBlocked.filter((id) => id !== userIdOrChatId)
+      : [...currentBlocked, userIdOrChatId];
+
+    handleUpdateUser({ blockedUserIds: updatedBlocked });
+
+    setChats((prev) =>
+      prev.map((c) => {
+        if (c.id === userIdOrChatId) {
+          return { ...c, isBlocked: !isCurrentlyBlocked };
+        }
+        return c;
+      })
+    );
+  };
+
+  // Forward messages to any chat (supports single or multi-message forward)
+  const handleForwardMessages = (targetChatId: string, msgsToForward: Message[]) => {
+    if (!msgsToForward || msgsToForward.length === 0) return;
+    const now = new Date();
+    const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+    
+    const newFwdMessages: Message[] = msgsToForward.map((msg, index) => ({
+      id: `fwd_${Date.now()}_${index}`,
+      chatId: targetChatId,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      isOutgoing: true,
+      text: msg.text,
+      type: msg.type,
+      mediaUrl: msg.mediaUrl,
+      fileName: msg.fileName,
+      fileSize: msg.fileSize,
+      voiceDuration: msg.voiceDuration,
+      voiceWaveform: msg.voiceWaveform,
+      isSpoiler: msg.isSpoiler,
+      forwardFrom: {
+        originalSender: getSenderFriendlyName(
+          msg.forwardFrom?.originalSender || msg.senderName,
+          {
+            senderId: msg.senderId,
+            usersList,
+            contacts,
+            currentUser,
+            chats,
+            chatId: msg.chatId
+          }
+        )
+      },
+      reactions: [],
+      status: 'sent',
+      timestamp: timeStr
+    }));
+
+    setMessages((prev) => ({
+      ...prev,
+      [targetChatId]: [...(prev[targetChatId] || []), ...newFwdMessages]
+    }));
+
+    newFwdMessages.forEach((fwd) => saveMessageToRemote(fwd));
+
+    const lastMsg = msgsToForward[msgsToForward.length - 1];
+    setChats((prev) =>
+      prev.map((c) =>
+        c.id === targetChatId
+          ? {
+              ...c,
+              lastMessage: {
+                text: msgsToForward.length > 1
+                  ? `فوروارد ${msgsToForward.length} پیام`
+                  : `فوروارد: ${lastMsg.text || 'رسانه'}`,
+                timestamp: timeStr,
+                isOutgoing: true,
+                status: 'sent'
+              }
+            }
+          : c
+      )
+    );
+
+    setSelectedMessageIds([]);
+    setForwardingMessages(null);
+
+    // Switch to target chat so user can see forwarded messages
+    setActiveChatId(targetChatId);
+    setMobileView('chat');
+  };
+
+  // Multiple Profile Photos update for Group/Channel
+  const handleUpdateChatPhotos = (chatId: string, photos: string[], mainAvatar: string) => {
+    setChats((prev) =>
+      prev.map((c) => (c.id === chatId ? { ...c, avatars: photos, avatar: mainAvatar } : c))
+    );
   };
 
   return (
@@ -979,6 +1387,11 @@ export default function App() {
           }}
           usersList={usersList}
           onOpenPwaInstall={() => setIsPwaInstallOpen(true)}
+          onDeleteChat={handleDeleteChat}
+          onClearHistory={handleClearChatHistory}
+          onTogglePinChat={handleTogglePinChat}
+          onToggleMuteChat={handleToggleMuteChat}
+          onToggleBlockUser={handleToggleBlockUser}
         />
       </div>
 
@@ -1011,6 +1424,15 @@ export default function App() {
           onToggleChatAdmin={handleToggleChatAdmin}
           onToggleSearch={() => setIsSearchOpen((prev) => !prev)}
           isSearchOpen={isSearchOpen}
+          onOpenWallpaperSettings={() => {
+            setSettingsInitialSection('chat_settings');
+            setIsSettingsOpen(true);
+          }}
+          onClearHistory={handleClearChatHistory}
+          onDeleteChat={handleDeleteChat}
+          onToggleBlockUser={handleToggleBlockUser}
+          isBlocked={isCurrentChatBlocked}
+          onUpdateChatPhotos={handleUpdateChatPhotos}
         />
 
         {/* In-Chat Interactive Message Search Bar */}
@@ -1023,10 +1445,81 @@ export default function App() {
           activeTopicId={activeChat.activeTopicId}
         />
 
-        {/* Messages Stream Container */}
-        <div className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 py-3 sm:py-4 space-y-1 relative">
-          {/* Subtle Telegram Wallpaper Grid */}
-          <div className="absolute inset-0 opacity-5 pointer-events-none bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:16px_16px]" />
+        {/* Pinned Messages Dedicated UI Bar */}
+        {pinnedMessages.length > 0 && (
+          <PinnedMessageBar
+            pinnedMessages={pinnedMessages}
+            onJumpToMessage={handleSelectSearchedMessage}
+            onUnpinMessage={handleUnpinMessage}
+            isAdmin={isChatAdmin || activeChat.type === 'private'}
+          />
+        )}
+
+        {/* Telegram Style Selection Action Bar */}
+        {selectedMessageIds.length > 0 && (
+          <div className="bg-[#17212b] border-b border-cyan-500/30 px-3 sm:px-4 py-2 flex items-center justify-between text-white shadow-lg animate-in slide-in-from-top-2 duration-200 z-20 flex-shrink-0">
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSelectedMessageIds([])}
+                className="p-1.5 hover:bg-slate-700/60 rounded-xl text-slate-300 hover:text-white transition-colors cursor-pointer"
+                title="لغو انتخاب"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <div className="flex items-center gap-1.5">
+                <span className="font-extrabold text-xs sm:text-sm text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded-lg border border-cyan-500/20">
+                  {selectedMessageIds.length}
+                </span>
+                <span className="text-xs text-slate-200 font-medium">پیام انتخاب شده</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {/* Forward Selected Messages */}
+              <button
+                type="button"
+                onClick={() => {
+                  const selectedMsgs = rawChatMessages.filter((m) => selectedMessageIds.includes(m.id));
+                  if (selectedMsgs.length > 0) {
+                    setForwardingMessages(selectedMsgs);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                title="فوروارد پیام‌های انتخاب شده"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>فوروارد</span>
+              </button>
+
+              {/* Delete Selected Messages */}
+              <button
+                type="button"
+                onClick={() => {
+                  const selectedMsgs = rawChatMessages.filter((m) => selectedMessageIds.includes(m.id));
+                  if (selectedMsgs.length > 0) {
+                    setDeleteModalMessages(selectedMsgs);
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all shadow-sm cursor-pointer"
+                title="حذف پیام‌های انتخاب شده"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>حذف</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Messages Stream Container with Dynamic Wallpaper Background */}
+        <div 
+          className="flex-1 overflow-y-auto px-2 sm:px-4 md:px-6 py-3 sm:py-4 space-y-1 relative transition-all duration-300"
+          style={{ background: chatWallpaper.value }}
+        >
+          {/* Subtle Telegram Wallpaper Grid if enabled */}
+          {chatWallpaper.hasPattern !== false && (
+            <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#38bdf8_1.5px,transparent_1.5px)] [background-size:16px_16px]" />
+          )}
 
           {/* Secret Chat Notice */}
           {activeChat.type === 'secret' && (
@@ -1051,29 +1544,62 @@ export default function App() {
               onReply={(m) => setReplyingTo(m)}
               onEdit={(m) => setEditingMessage(m)}
               onDelete={handleDeleteMessage}
+              onRequestDelete={(m) => setDeleteModalMessages([m])}
               onTranscribe={handleTranscribeMessage}
               isTranslatingChat={isTranslatingChat}
               isHighlighted={highlightedMessageId === msg.id}
+              canPin={isChatAdmin || activeChat.type === 'private'}
+              onTogglePin={handleTogglePinMessage}
+              isGroupChat={activeChat.type === 'group' || activeChat.type === 'supergroup'}
+              onForward={(m) => setForwardingMessages([m])}
+              onJumpToMessage={handleSelectSearchedMessage}
+              isSelectionMode={selectedMessageIds.length > 0}
+              isSelected={selectedMessageIds.includes(msg.id)}
+              onToggleSelect={(id) => {
+                setSelectedMessageIds((prev) =>
+                  prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+                );
+              }}
+              onStartSelection={(id) => {
+                setSelectedMessageIds((prev) =>
+                  prev.includes(id) ? prev : [...prev, id]
+                );
+              }}
             />
           ))}
 
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Message Input Bar */}
-        <MessageInput
-          onSendMessage={handleSendMessage}
-          replyingTo={replyingTo}
-          onCancelReply={() => setReplyingTo(null)}
-          onOpenChunkUploader={() => setIsChunkUploaderOpen(true)}
-          isPremium={currentUser.isPremium}
-          draftText={activeChat.draft}
-          onDraftChange={(val) => {
-            setChats((prev) =>
-              prev.map((c) => (c.id === activeChatId ? { ...c, draft: val || undefined } : c))
-            );
-          }}
-        />
+        {/* Message Input Bar or Blocked Alert */}
+        {isCurrentChatBlocked ? (
+          <div className="p-3 sm:p-4 bg-slate-900/95 border-t border-slate-800 text-center flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg flex-shrink-0">
+            <div className="flex items-center gap-2 text-rose-300 text-xs sm:text-sm font-bold">
+              <ShieldAlert className="w-4 h-4 text-rose-400 flex-shrink-0" />
+              <span>این کاربر در لیست مسدودشده‌ها قرار دارد و امکان ارسال پیام وجود ندارد.</span>
+            </div>
+            <button
+              onClick={() => handleToggleBlockUser(activeChat.id, activeChat.title)}
+              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+            >
+              رفع مسدودی (Unblock)
+            </button>
+          </div>
+        ) : (
+          <MessageInput
+            onSendMessage={handleSendMessage}
+            replyingTo={replyingTo}
+            onCancelReply={() => setReplyingTo(null)}
+            onOpenChunkUploader={() => setIsChunkUploaderOpen(true)}
+            isPremium={currentUser.isPremium}
+            draftText={activeChat.draft}
+            onDraftChange={(val) => {
+              setChats((prev) =>
+                prev.map((c) => (c.id === activeChatId ? { ...c, draft: val || undefined } : c))
+              );
+            }}
+          />
+        )}
       </div>
 
       {/* Interactive Modals */}
@@ -1196,6 +1722,9 @@ export default function App() {
         initialSection={settingsInitialSection}
         onSyncDatabase={handleSyncDatabase}
         onOpenPwaInstall={() => setIsPwaInstallOpen(true)}
+        currentWallpaper={chatWallpaper}
+        onSelectWallpaper={setChatWallpaper}
+        onToggleBlockUser={handleToggleBlockUser}
       />
 
       {/* 11. PWA & Web2App Install Modal (without APK) */}
@@ -1204,6 +1733,26 @@ export default function App() {
         onClose={() => setIsPwaInstallOpen(false)}
         deferredPrompt={deferredInstallPrompt}
         isInstalled={isAppInstalled}
+      />
+
+      {/* 12. Forward Message Modal (Telegram Style: single or multi-message) */}
+      <ForwardMessageModal
+        isOpen={Boolean(forwardingMessages && forwardingMessages.length > 0)}
+        onClose={() => setForwardingMessages(null)}
+        messagesToForward={forwardingMessages || []}
+        chats={chats}
+        onForward={handleForwardMessages}
+      />
+
+      {/* 13. Two-choice Delete Confirmation Modal (Telegram Style: Both sides vs Only for me) */}
+      <DeleteMessageModal
+        isOpen={Boolean(deleteModalMessages && deleteModalMessages.length > 0)}
+        onClose={() => setDeleteModalMessages(null)}
+        messages={deleteModalMessages || []}
+        onDeleteForEveryone={handleConfirmDeleteForEveryone}
+        onDeleteForMeOnly={handleConfirmDeleteForMeOnly}
+        chatTitle={activeChat.title}
+        isGroupChat={activeChat.type === 'group' || activeChat.type === 'supergroup'}
       />
     </div>
   );

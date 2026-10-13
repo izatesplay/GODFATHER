@@ -59,7 +59,10 @@ import {
   validateUsernameFormat,
   updateUserOnRemote
 } from '../utils/apiSync';
-import { Chat } from '../types/telegram';
+import { Chat, ChatWallpaper } from '../types/telegram';
+import { SOLID_WALLPAPERS, GRADIENT_WALLPAPERS, DEFAULT_WALLPAPER } from '../data/wallpapers';
+import { ProfilePhotoViewerModal } from './ProfilePhotoViewerModal';
+import { getUserProfileLink, getDisplayDomain } from '../utils/linkHelper';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -74,6 +77,9 @@ interface SettingsModalProps {
   initialSection?: SettingsSection;
   onSyncDatabase?: () => Promise<{ success: boolean; message?: string; error?: string }>;
   onOpenPwaInstall?: () => void;
+  currentWallpaper?: ChatWallpaper;
+  onSelectWallpaper?: (wallpaper: ChatWallpaper) => void;
+  onToggleBlockUser?: (userIdOrChatId: string, userName?: string) => void;
 }
 
 type SettingsSection = 
@@ -115,9 +121,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenAdminPanel,
   initialSection = 'main',
   onSyncDatabase,
-  onOpenPwaInstall
+  onOpenPwaInstall,
+  currentWallpaper = DEFAULT_WALLPAPER,
+  onSelectWallpaper,
+  onToggleBlockUser
 }) => {
   const [currentSection, setCurrentSection] = useState<SettingsSection>(initialSection);
+  const [wallpaperCategory, setWallpaperCategory] = useState<'solid' | 'gradient' | 'custom'>(() => {
+    return currentWallpaper?.type === 'gradient' ? 'gradient' : currentWallpaper?.type === 'image' ? 'custom' : 'solid';
+  });
   const avatarFileInputRef = useRef<HTMLInputElement>(null);
   const wallpaperFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -152,6 +164,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [profileSuccessMsg, setProfileSuccessMsg] = useState(false);
   const [profileErrorMsg, setProfileErrorMsg] = useState<string | null>(null);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+
+  // Multiple profile avatars album state
+  const [isProfileViewerOpen, setIsProfileViewerOpen] = useState(false);
+  const [currentAvatarIndex, setCurrentAvatarIndex] = useState(0);
+  const userPhotos = (currentUser.avatars && currentUser.avatars.length > 0)
+    ? currentUser.avatars
+    : [currentUser.avatar];
+  const safeAvatarIndex = Math.min(currentAvatarIndex, userPhotos.length - 1);
 
   const [usernameStatus, setUsernameStatus] = useState<{
     checking: boolean;
@@ -304,15 +324,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   if (!isOpen) return null;
 
-  // Handle native phone photo selection
+  // Handle native phone photo selection (unlimited profile photo album)
   const handleAvatarFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
       reader.onload = () => {
         if (typeof reader.result === 'string') {
-          setAvatarPreview(reader.result);
-          onUpdateUser({ avatar: reader.result });
+          const res = reader.result;
+          setAvatarPreview(res);
+          const currentList = (currentUser.avatars && currentUser.avatars.length > 0)
+            ? currentUser.avatars
+            : [currentUser.avatar];
+          const updated = [res, ...currentList.filter((a) => a !== res)];
+          onUpdateUser({ avatar: res, avatars: updated });
+          setCurrentAvatarIndex(0);
           setProfileSuccessMsg(true);
           setTimeout(() => setProfileSuccessMsg(false), 2500);
         }
@@ -770,37 +796,106 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              {/* Avatar Preview & Direct Gallery File Picker */}
+              {/* Avatar Album Carousel Preview & Gallery File Picker */}
               <div className="flex flex-col items-center gap-3 pb-4 border-b border-slate-800">
-                <div 
-                  onClick={() => avatarFileInputRef.current?.click()}
-                  className="relative group cursor-pointer"
-                  title="برای تغییر عکس از حافظه گوشی کلیک کنید"
-                >
-                  <img
-                    src={avatarPreview}
-                    alt="Avatar preview"
-                    className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-4 border-cyan-400 shadow-xl"
-                  />
-                  <div className="absolute inset-0 bg-black/50 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Camera className="w-7 h-7 text-white" />
-                    <span className="text-[10px] text-white font-medium mt-1">تغییر عکس</span>
+                <div className="relative group flex items-center justify-center">
+                  <div 
+                    onClick={() => setIsProfileViewerOpen(true)}
+                    className="relative cursor-pointer group-hover:scale-102 transition-transform"
+                    title="برای مشاهده آلبوم کامل عکس‌های پروفایل کلیک کنید"
+                  >
+                    <img
+                      src={userPhotos[safeAvatarIndex] || avatarPreview}
+                      alt="Avatar preview"
+                      className="w-24 h-24 sm:w-28 sm:h-28 rounded-full object-cover border-4 border-cyan-400 shadow-xl"
+                    />
+                    <div className="absolute inset-0 bg-black/40 rounded-full flex flex-col items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Eye className="w-6 h-6 text-white" />
+                      <span className="text-[10px] text-white font-medium mt-0.5">مشاهده آلبوم</span>
+                    </div>
+                    {userPhotos.length > 1 && (
+                      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/80 text-cyan-300 text-[10px] font-mono px-2 py-0.5 rounded-full border border-white/20">
+                        {safeAvatarIndex + 1} / {userPhotos.length}
+                      </div>
+                    )}
                   </div>
-                  <div className="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-cyan-500 text-white flex items-center justify-center shadow-lg border-2 border-[#18222d]">
-                    <Camera className="w-4 h-4" />
-                  </div>
+
+                  {/* Previous / Next buttons for profile photos */}
+                  {userPhotos.length > 1 && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentAvatarIndex((prev) => (prev - 1 + userPhotos.length) % userPhotos.length)}
+                        className="absolute -right-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-xs shadow-md border border-slate-600 cursor-pointer"
+                        title="عکس قبلی"
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCurrentAvatarIndex((prev) => (prev + 1) % userPhotos.length)}
+                        className="absolute -left-3 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-slate-800 hover:bg-slate-700 text-white flex items-center justify-center text-xs shadow-md border border-slate-600 cursor-pointer"
+                        title="عکس بعدی"
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </button>
+                    </>
+                  )}
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => avatarFileInputRef.current?.click()}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold hover:bg-cyan-500/25 transition-all cursor-pointer shadow-sm"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>انتخاب عکس از حافظه / گالری گوشی</span>
-                </button>
+                {/* Album action controls */}
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => avatarFileInputRef.current?.click()}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 text-xs font-bold hover:bg-cyan-500/25 transition-all cursor-pointer shadow-sm"
+                    title="افزودن عکس نامحدود به آلبوم پروفایل بدون حذف قبلی‌ها"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>افزودن عکس جدید به آلبوم</span>
+                  </button>
+
+                  {safeAvatarIndex !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const selected = userPhotos[safeAvatarIndex];
+                        const reordered = [selected, ...userPhotos.filter((_, i) => i !== safeAvatarIndex)];
+                        onUpdateUser({ avatar: selected, avatars: reordered });
+                        setCurrentAvatarIndex(0);
+                        setProfileSuccessMsg(true);
+                        setTimeout(() => setProfileSuccessMsg(false), 2000);
+                      }}
+                      className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold hover:bg-amber-500/25 transition-all cursor-pointer shadow-sm"
+                      title="انتخاب این عکس به عنوان عکس اصلی پروفایل"
+                    >
+                      <Crown className="w-3.5 h-3.5 text-amber-400" />
+                      <span>تنظیم به عنوان عکس اصلی</span>
+                    </button>
+                  )}
+
+                  {userPhotos.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const reordered = userPhotos.filter((_, i) => i !== safeAvatarIndex);
+                        const newMain = safeAvatarIndex === 0 ? reordered[0] : currentUser.avatar;
+                        onUpdateUser({ avatar: newMain, avatars: reordered });
+                        setCurrentAvatarIndex((prev) => Math.max(0, prev - 1));
+                        setProfileSuccessMsg(true);
+                        setTimeout(() => setProfileSuccessMsg(false), 2000);
+                      }}
+                      className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-300 text-xs font-bold hover:bg-rose-500/25 transition-all cursor-pointer shadow-sm"
+                      title="حذف این عکس از آلبوم"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                      <span>حذف عکس</span>
+                    </button>
+                  )}
+                </div>
+
                 <p className="text-[11px] text-slate-400 text-center">
-                  تصویر مستقیماً از حافظه گوشی یا دوربین شما بارگذاری می‌شود.
+                  شما می‌توانید تا بی‌نهایت عکس به آلبوم پروفایل خود اضافه کنید. ({userPhotos.length} عکس ثبت شده)
                 </p>
               </div>
 
@@ -878,9 +973,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </p>
                 )}
 
-                <p className="text-[11px] text-slate-400">
-                  لینک مستقیم شما: <span className="text-cyan-400 font-mono">t.me/{usernameInput ? usernameInput.replace(/^@+/, '') : 'username'}</span>
-                </p>
+                <div className="flex items-center justify-between p-2 rounded-xl bg-slate-900/60 border border-slate-800 text-[11px] text-slate-300">
+                  <div className="min-w-0 flex-1 truncate">
+                    <span>لینک مستقیم شما ({getDisplayDomain()}): </span>
+                    <span className="text-cyan-400 font-mono" dir="ltr">
+                      {getUserProfileLink(usernameInput || currentUser.username || 'username')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(getUserProfileLink(usernameInput || currentUser.username || 'username'));
+                      setProfileSuccessMsg(true);
+                      setTimeout(() => setProfileSuccessMsg(false), 2000);
+                    }}
+                    className="mr-2 text-cyan-400 hover:text-cyan-300 font-bold cursor-pointer flex-shrink-0"
+                  >
+                    کپی پیوند
+                  </button>
+                </div>
               </div>
 
               {/* Bio */}
@@ -1092,39 +1203,227 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Chat Wallpaper with Direct Phone Gallery Selection */}
-              <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-3">
+              {/* Chat Wallpaper Customizer (Solid Colors, Abstract Gradients & Gallery) */}
+              <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 space-y-4">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="font-bold text-white">تصویر پس‌زمینه چت (Wallpaper):</span>
-                  {customWallpaper && (
-                    <button
-                      onClick={() => setCustomWallpaper(null)}
-                      className="text-rose-400 text-[11px] hover:underline"
-                    >
-                      حذف والپیپر سفارشی
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <Palette className="w-4 h-4 text-cyan-400" />
+                    <span className="font-bold text-white">پس‌زمینه محیط گفتگو (Chat Wallpaper):</span>
+                  </div>
+                  <span className="text-[11px] text-cyan-400 font-medium">{currentWallpaper?.name || 'کلاسیک'}</span>
                 </div>
 
-                {customWallpaper ? (
-                  <div className="h-28 rounded-2xl overflow-hidden border border-slate-700 relative">
-                    <img src={customWallpaper} alt="Custom wallpaper" className="w-full h-full object-cover" />
-                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                      <span className="text-xs text-white bg-black/60 px-3 py-1 rounded-full">
-                        والپیپر انتخابی از گوشی فعال است
-                      </span>
+                {/* Live Wallpaper & Message Bubble Mini Preview */}
+                <div 
+                  className="w-full h-36 rounded-2xl p-3 border border-slate-700/80 shadow-inner relative overflow-hidden flex flex-col justify-end gap-2 transition-all duration-300"
+                  style={{
+                    background: currentWallpaper?.value || '#0e1621'
+                  }}
+                >
+                  {/* Pattern Grid Overlay if enabled */}
+                  {currentWallpaper?.hasPattern !== false && (
+                    <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#38bdf8_1.5px,transparent_1.5px)] [background-size:16px_16px]" />
+                  )}
+
+                  {/* Sample Incoming Bubble */}
+                  <div className="self-start max-w-[75%] bg-[#212d3b]/95 backdrop-blur-sm text-slate-100 text-xs px-3 py-1.5 rounded-2xl rounded-bl-xs border border-slate-700/50 shadow-md">
+                    سلام! پس‌زمینه چت‌ها به‌روزرسانی شد 🎨
+                  </div>
+
+                  {/* Sample Outgoing Bubble */}
+                  <div className="self-end max-w-[75%] bg-gradient-to-r from-[#2b5278] to-[#1e3c5a] text-white text-xs px-3 py-1.5 rounded-2xl rounded-br-xs border border-blue-600/30 shadow-md flex items-center justify-between gap-3">
+                    <span>خیلی شیک و خوانا به نظر می‌رسه! 👌</span>
+                    <span className="text-[9px] text-cyan-300 font-mono">۱۰:۲۵ ✓✓</span>
+                  </div>
+                </div>
+
+                {/* Wallpaper Type Switcher Tabs */}
+                <div className="grid grid-cols-3 gap-1 bg-[#17212b] p-1 rounded-xl border border-slate-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setWallpaperCategory('solid')}
+                    className={`py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                      wallpaperCategory === 'solid'
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    رنگ یکدست
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWallpaperCategory('gradient')}
+                    className={`py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                      wallpaperCategory === 'gradient'
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    گرادیان انتزاعی
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWallpaperCategory('custom')}
+                    className={`py-1.5 rounded-lg font-medium transition-all cursor-pointer ${
+                      wallpaperCategory === 'custom'
+                        ? 'bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/40'
+                        : 'text-slate-400 hover:text-slate-200'
+                    }`}
+                  >
+                    گالری شخصی
+                  </button>
+                </div>
+
+                {/* Category 1: Solid Colors Grid */}
+                {wallpaperCategory === 'solid' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {SOLID_WALLPAPERS.map((wp) => {
+                      const isSelected = currentWallpaper?.id === wp.id;
+                      return (
+                        <button
+                          key={wp.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectWallpaper?.({
+                              ...wp,
+                              hasPattern: currentWallpaper?.hasPattern !== false
+                            });
+                          }}
+                          className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border text-center transition-all cursor-pointer relative ${
+                            isSelected
+                              ? 'border-cyan-400 ring-2 ring-cyan-500/30 bg-slate-800/90'
+                              : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                          }`}
+                        >
+                          <div
+                            className="w-full h-11 rounded-lg border border-slate-700/60 shadow-inner flex items-center justify-center relative"
+                            style={{ backgroundColor: wp.value }}
+                          >
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full bg-cyan-500 text-white flex items-center justify-center shadow-lg">
+                                <Check className="w-3.5 h-3.5" />
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[11px] font-medium text-slate-300 truncate w-full">
+                            {wp.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Category 2: Abstract Gradients Grid */}
+                {wallpaperCategory === 'gradient' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                    {GRADIENT_WALLPAPERS.map((wp) => {
+                      const isSelected = currentWallpaper?.id === wp.id;
+                      return (
+                        <button
+                          key={wp.id}
+                          type="button"
+                          onClick={() => {
+                            onSelectWallpaper?.({
+                              ...wp,
+                              hasPattern: currentWallpaper?.hasPattern !== false
+                            });
+                          }}
+                          className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border text-center transition-all cursor-pointer relative ${
+                            isSelected
+                              ? 'border-cyan-400 ring-2 ring-cyan-500/30 bg-slate-800/90'
+                              : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
+                          }`}
+                        >
+                          <div
+                            className="w-full h-11 rounded-lg border border-slate-700/60 shadow-inner flex items-center justify-center relative"
+                            style={{ background: wp.value }}
+                          >
+                            {isSelected && (
+                              <div className="w-5 h-5 rounded-full bg-cyan-500 text-white flex items-center justify-center shadow-lg">
+                                <Check className="w-3.5 h-3.5" />
+                              </div>
+                            )}
+                          </div>
+                          <span className="text-[11px] font-medium text-slate-300 truncate w-full">
+                            {wp.name}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Category 3: Gallery Selection */}
+                {wallpaperCategory === 'custom' && (
+                  <div className="space-y-3">
+                    {customWallpaper ? (
+                      <div className="h-28 rounded-2xl overflow-hidden border border-slate-700 relative">
+                        <img src={customWallpaper} alt="Custom wallpaper" className="w-full h-full object-cover" />
+                        <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                          <span className="text-xs text-white bg-black/60 px-3 py-1 rounded-full">
+                            تصویر انتخابی از حافظه گوشی فعال است
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-4 rounded-xl border border-dashed border-slate-700 text-center text-xs text-slate-400">
+                        تصویری از گالری انتخاب نشده است. با دکمه زیر می‌توانید عکس دلخواه خود را بارگذاری کنید.
+                      </div>
+                    )}
+
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => wallpaperFileInputRef.current?.click()}
+                        className="flex-1 py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                        <span>انتخاب تصویر از گالری</span>
+                      </button>
+                      {customWallpaper && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setCustomWallpaper(null);
+                            onSelectWallpaper?.(DEFAULT_WALLPAPER);
+                          }}
+                          className="px-3 py-2.5 bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 text-xs font-bold rounded-xl transition-all cursor-pointer"
+                        >
+                          حذف
+                        </button>
+                      )}
                     </div>
                   </div>
-                ) : null}
+                )}
 
-                <button
-                  type="button"
-                  onClick={() => wallpaperFileInputRef.current?.click()}
-                  className="w-full py-2.5 bg-cyan-500/15 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/25 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer shadow-sm"
-                >
-                  <ImageIcon className="w-4 h-4" />
-                  <span>انتخاب والپیپر از گالری گوشی</span>
-                </button>
+                {/* Pattern Grid Toggle & Reset */}
+                <div className="pt-2 border-t border-slate-800 flex items-center justify-between">
+                  <label className="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={currentWallpaper?.hasPattern !== false}
+                      onChange={(e) => {
+                        if (currentWallpaper) {
+                          onSelectWallpaper?.({
+                            ...currentWallpaper,
+                            hasPattern: e.target.checked
+                          });
+                        }
+                      }}
+                      className="rounded accent-cyan-500 w-4 h-4 cursor-pointer"
+                    />
+                    <span>نمایش پترن نقطه‌ای ظریف تلگرام (Pattern Overlay)</span>
+                  </label>
+
+                  <button
+                    type="button"
+                    onClick={() => onSelectWallpaper?.(DEFAULT_WALLPAPER)}
+                    className="text-[11px] text-cyan-400 hover:underline cursor-pointer"
+                  >
+                    بازنشانی به پیش‌فرض
+                  </button>
+                </div>
               </div>
 
               {/* Bubble Radius Slider */}
@@ -1673,29 +1972,111 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
              ============================================================ */}
           {currentSection === 'blocked_users' && (
             <div className="p-4 sm:p-5 space-y-4">
-              <div className="text-xs text-slate-300">
-                کاربران مسدود شده نمی‌توانند برای شما پیام ارسال کنند یا آخرین بازدید و تماس‌های شما را مشاهده کنند:
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-slate-300">
+                  کاربران مسدود شده نمی‌توانند برای شما پیام ارسال کنند یا عکس پروفایل، آخرین بازدید و تماس‌های شما را مشاهده کنند:
+                </div>
               </div>
 
-              {blockedUsers.length === 0 ? (
-                <div className="p-6 text-center text-xs text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800">
-                  هیچ کاربری در لیست مسدودشده‌ها قرار ندارد.
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {blockedUsers.map((bUser, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 text-xs">
-                      <span className="text-white font-medium">{bUser}</span>
-                      <button
-                        onClick={() => handleUnblockUser(bUser)}
-                        className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-cyan-400 rounded-lg text-[11px] font-bold transition-colors cursor-pointer"
-                      >
-                        رفع مسدودی (Unblock)
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
+              {/* Real blocked entries combined from currentUser.blockedUserIds and blocked chats */}
+              {(() => {
+                const blockedIds = Array.from(new Set([
+                  ...(currentUser.blockedUserIds || []),
+                  ...chats.filter((c) => c.isBlocked).map((c) => c.id)
+                ]));
+
+                const realBlockedList = blockedIds.map((bId) => {
+                  const chatMatch = chats.find((c) => c.id === bId);
+                  const userMatch = usersList.find((u) => u.id === bId || u.phone === bId || u.username === bId);
+                  return {
+                    id: bId,
+                    name: chatMatch?.title || userMatch?.name || bId,
+                    subtitle: userMatch?.username ? `@${userMatch.username}` : userMatch?.phone || chatMatch?.type || 'کاربر مسدود شده'
+                  };
+                });
+
+                return (
+                  <div className="space-y-3">
+                    {realBlockedList.length === 0 ? (
+                      <div className="p-8 text-center text-xs text-slate-500 bg-slate-900/40 rounded-2xl border border-slate-800 space-y-2">
+                        <div className="w-12 h-12 rounded-full bg-slate-800/80 text-slate-600 flex items-center justify-center mx-auto">
+                          <UserX className="w-6 h-6" />
+                        </div>
+                        <div className="font-bold text-slate-400">هیچ کاربری در لیست مسدودشده‌ها قرار ندارد</div>
+                        <p className="text-[11px] text-slate-500 max-w-xs mx-auto">
+                          می‌توانید از منوی گزینه‌های هر گفتگو، افراد مزاحم را مسدود کنید تا دیگر نتوانند به شما پیام دهند.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {realBlockedList.map((item) => (
+                          <div 
+                            key={item.id} 
+                            className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-700/80 transition-all text-xs"
+                          >
+                            <div className="flex items-center gap-3">
+                              {/* Avatar is hidden and locked as per privacy specification */}
+                              <div className="w-10 h-10 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center flex-shrink-0 text-slate-500">
+                                <Lock className="w-4 h-4" />
+                              </div>
+                              <div>
+                                <div className="text-white font-bold flex items-center gap-1.5">
+                                  <span>{item.name}</span>
+                                  <span className="text-[9px] px-1.5 py-0.2 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full font-bold">
+                                    مسدود شده
+                                  </span>
+                                </div>
+                                <div className="text-[11px] text-slate-400">{item.subtitle}</div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                onToggleBlockUser?.(item.id, item.name);
+                              }}
+                              className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-cyan-400 hover:text-cyan-300 border border-slate-700 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-sm"
+                            >
+                              رفع مسدودی (Unblock)
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Quick block selector from available private chats */}
+                    {chats.filter((c) => c.type === 'private' && c.id !== 'chat_saved' && !c.isBlocked && !(currentUser.blockedUserIds || []).includes(c.id)).length > 0 && (
+                      <div className="pt-2">
+                        <label className="text-[11px] font-bold text-slate-400 block mb-2">
+                          افزودن مخاطب به لیست مسدودشده‌ها:
+                        </label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {chats
+                            .filter((c) => c.type === 'private' && c.id !== 'chat_saved' && !c.isBlocked && !(currentUser.blockedUserIds || []).includes(c.id))
+                            .slice(0, 4)
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onClick={() => {
+                                  onToggleBlockUser?.(c.id, c.title);
+                                }}
+                                className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/40 hover:bg-rose-500/10 border border-slate-800 hover:border-rose-500/30 text-right cursor-pointer transition-all group"
+                              >
+                                <span className="text-xs text-slate-300 group-hover:text-rose-300 truncate font-medium">
+                                  {c.title}
+                                </span>
+                                <span className="text-[10px] text-rose-400 font-bold flex items-center gap-0.5 flex-shrink-0">
+                                  <UserX className="w-3 h-3" />
+                                  <span>مسدود کردن</span>
+                                </span>
+                              </button>
+                            ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -1915,6 +2296,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
         )}
       </div>
+
+      {/* Fullscreen Profile Photos Album Viewer */}
+      <ProfilePhotoViewerModal
+        isOpen={isProfileViewerOpen}
+        onClose={() => setIsProfileViewerOpen(false)}
+        title={currentUser.name}
+        subtitle="عکس‌های پروفایل حساب شما"
+        photos={userPhotos}
+        canEdit={true}
+        onAddPhoto={(newUrl) => {
+          const updated = [newUrl, ...userPhotos];
+          onUpdateUser({ avatar: newUrl, avatars: updated });
+          setCurrentAvatarIndex(0);
+        }}
+        onDeletePhoto={(idx) => {
+          if (userPhotos.length > 1) {
+            const updated = userPhotos.filter((_, i) => i !== idx);
+            onUpdateUser({ avatar: updated[0], avatars: updated });
+            setCurrentAvatarIndex(0);
+          }
+        }}
+        onSetMainPhoto={(idx) => {
+          if (userPhotos[idx]) {
+            const target = userPhotos[idx];
+            const updated = [target, ...userPhotos.filter((_, i) => i !== idx)];
+            onUpdateUser({ avatar: target, avatars: updated });
+            setCurrentAvatarIndex(0);
+          }
+        }}
+      />
     </div>
   );
 };

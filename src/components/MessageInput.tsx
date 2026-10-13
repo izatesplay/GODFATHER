@@ -14,7 +14,8 @@ import {
   Image as ImageIcon,
   Check,
   Trash2,
-  AlertCircle
+  AlertCircle,
+  CornerUpLeft
 } from 'lucide-react';
 import { Message } from '../types/telegram';
 import { RoundVideoRecorderModal } from './RoundVideoRecorderModal';
@@ -347,6 +348,34 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         onChange={handleDocumentFilesSelected}
         className="hidden"
       />
+
+      {/* Telegram Native Reply Preview Bar */}
+      {replyingTo && (
+        <div className="flex items-center justify-between bg-[#1e293b]/95 border border-cyan-500/40 rounded-2xl px-3 py-2 mb-2 shadow-lg backdrop-blur-sm animate-in slide-in-from-bottom-2 duration-150">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-1 h-7 bg-cyan-400 rounded-full flex-shrink-0" />
+            <div className="w-7 h-7 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center flex-shrink-0">
+              <CornerUpLeft className="w-4 h-4" />
+            </div>
+            <div className="min-w-0 flex-1 text-right">
+              <div className="text-xs font-bold text-cyan-400 truncate flex items-center gap-1.5">
+                <span>پاسخ به {replyingTo.senderName}</span>
+              </div>
+              <div className="text-[11px] text-slate-300 truncate">
+                {replyingTo.text || (replyingTo.type === 'photo' ? '📷 عکس' : replyingTo.type === 'voice' ? '🎤 پیام صوتی' : replyingTo.type === 'video' ? '🎬 ویدیو' : replyingTo.type === 'round_video' ? '🎥 پیام ویدیویی گرد' : '📎 فایل')}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            className="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors cursor-pointer flex-shrink-0 mr-1"
+            title="لغو پاسخ (Escape)"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
 
       {/* Main Input Row */}
       <div className="flex items-end gap-1.5 sm:gap-2">

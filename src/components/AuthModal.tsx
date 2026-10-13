@@ -21,6 +21,7 @@ import {
   validateUsernameFormat,
   registerUserOnRemote
 } from '../utils/apiSync';
+import { getUserProfileLink, getDisplayDomain } from '../utils/linkHelper';
 
 interface AuthModalProps {
   isOpen: boolean;
@@ -488,8 +489,11 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                   </p>
                 )}
 
-                <p className="text-[10px] text-slate-500">
-                  لینک پروفایل مستقیم شما: <span className="font-mono text-cyan-400">t.me/{regUsername ? regUsername.replace(/^@+/, '') : 'username'}</span>
+                <p className="text-[10px] text-slate-400">
+                  لینک پروفایل مستقیم شما ({getDisplayDomain()}):{' '}
+                  <span className="font-mono text-cyan-400" dir="ltr">
+                    {getUserProfileLink(regUsername ? regUsername.replace(/^@+/, '') : 'username')}
+                  </span>
                 </p>
               </div>
 

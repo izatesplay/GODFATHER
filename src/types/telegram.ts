@@ -6,6 +6,7 @@ export interface User {
   username: string;
   phone: string;
   avatar: string;
+  avatars?: string[]; // Multiple profile photos carousel
   bio?: string;
   isPremium: boolean;
   emojiStatus?: string;
@@ -15,6 +16,7 @@ export interface User {
   role?: 'superadmin' | 'admin' | 'moderator' | 'member';
   starsBalance?: number;
   isBanned?: boolean;
+  blockedUserIds?: string[]; // List of user IDs blocked by this user
 }
 
 export interface Topic {
@@ -31,6 +33,23 @@ export interface Reaction {
   count: number;
   userReacted?: boolean;
   isPremium?: boolean;
+}
+
+export interface MessageSeenBy {
+  id: string;
+  name: string;
+  avatar: string;
+  seenAt: string;
+  username?: string;
+  role?: 'owner' | 'admin' | 'moderator' | 'member';
+}
+
+export interface ChatWallpaper {
+  id: string;
+  name: string;
+  type: 'solid' | 'gradient' | 'image';
+  value: string;
+  hasPattern?: boolean;
 }
 
 export interface Message {
@@ -54,6 +73,9 @@ export interface Message {
   isSpoiler?: boolean;
   isSilent?: boolean;
   isEdited?: boolean;
+  isPinned?: boolean;
+  pinnedAt?: string;
+  seenBy?: MessageSeenBy[];
   replyTo?: {
     id: string;
     senderName: string;
@@ -66,6 +88,7 @@ export interface Message {
   status: 'sending' | 'sent' | 'read';
   timestamp: string;
   selfDestructIn?: number; // seconds remaining in secret chat
+  deletedForUserIds?: string[]; // IDs of users who deleted this message for themselves only
 }
 
 export interface Chat {
@@ -74,9 +97,12 @@ export interface Chat {
   title: string;
   username?: string;
   avatar: string;
+  avatars?: string[]; // Multiple photos carousel for group/channel/profile
   unreadCount: number;
   isPinned: boolean;
+  pinnedMessageIds?: string[];
   isMuted: boolean;
+  isBlocked?: boolean; // Block status for private chats
   draft?: string;
   draftText?: string;
   isVerified?: boolean;
@@ -121,6 +147,7 @@ export interface ChatMember {
   id: string;
   name: string;
   avatar: string;
+  avatars?: string[];
   role: 'owner' | 'admin' | 'moderator' | 'member';
   roleTitle?: string;
   isOnline?: boolean;
@@ -134,6 +161,7 @@ export interface Contact {
   name: string;
   phone: string;
   avatar: string;
+  avatars?: string[];
   status: string;
   isOnline: boolean;
   username?: string;

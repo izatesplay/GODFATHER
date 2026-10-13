@@ -33,19 +33,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   private handleResetStorage = () => {
     try {
-      // Clear app state keys while keeping the admin session safe
+      // Clear non-chat temporary cache keys, preserving user chats and messages
       const keysToRemove = [
-        'cp_chats',
-        'cp_messages',
-        'cp_stories',
-        'cp_contacts',
-        'cp_folders',
-        'cp_users_list',
+        'cp_chat_wallpaper',
         'cloudpulse_api_url'
       ];
       keysToRemove.forEach((k) => localStorage.removeItem(k));
-      // Reset user to superadmin
-      localStorage.removeItem('cp_user');
       window.location.reload();
     } catch (e) {
       console.error('Failed to reset storage:', e);

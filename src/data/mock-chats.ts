@@ -36,6 +36,7 @@ export const INITIAL_CHATS: Chat[] = [
     avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
     unreadCount: 0,
     isPinned: true,
+    pinnedMessageIds: ['msg_group_welcome'],
     isMuted: false,
     description: 'گروه گفتگوی اعضای GODFATHER SQUAD - مجهز به گفتگوی صوتی و تصویری زنده گروهی',
     membersCount: 42,
@@ -162,6 +163,42 @@ export const INITIAL_MESSAGES: Record<string, Message[]> = {
       type: 'text',
       reactions: [{ emoji: '🔥', count: 5 }, { emoji: '🚀', count: 3 }],
       status: 'read',
+      isPinned: true,
+      pinnedAt: 'هم‌اکنون',
+      seenBy: [
+        {
+          id: 'usr_owner_reza',
+          name: 'محمدرضا فتح‌آبادی',
+          username: 'mfathabadi',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          role: 'owner',
+          seenAt: '۱۰:۱۴'
+        },
+        {
+          id: 'usr_mod_artin',
+          name: 'آرتین رادمنش',
+          username: 'artin_rad',
+          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+          role: 'moderator',
+          seenAt: '۱۰:۱۶'
+        },
+        {
+          id: 'usr_member_ali',
+          name: 'علی تهرانی',
+          username: 'ali_teh',
+          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
+          role: 'member',
+          seenAt: '۱۰:۱۸'
+        },
+        {
+          id: 'usr_member_sara',
+          name: 'سارا محمدی',
+          username: 'sara_mhd',
+          avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+          role: 'member',
+          seenAt: '۱۰:۲۰'
+        }
+      ],
       timestamp: 'هم‌اکنون'
     }
   ],

@@ -22,6 +22,7 @@ import {
   checkUsernameAvailability, 
   validateUsernameFormat 
 } from '../utils/apiSync';
+import { getChatShareLink, getDisplayDomain } from '../utils/linkHelper';
 
 interface CreateChatModalProps {
   isOpen: boolean;
@@ -443,8 +444,11 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 </p>
               )}
 
-              <p className="text-[10px] text-slate-500">
-                لینک عمومی کانال: <span className="font-mono text-cyan-400">t.me/{channelUsername ? channelUsername.replace(/^@+/, '') : 'username'}</span>
+              <p className="text-[10px] text-slate-400">
+                لینک عمومی کانال ({getDisplayDomain()}):{' '}
+                <span className="font-mono text-cyan-400" dir="ltr">
+                  {getChatShareLink({ id: 'channel', username: channelUsername || 'channel' })}
+                </span>
               </p>
             </div>
           )}

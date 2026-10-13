@@ -16,8 +16,11 @@ import {
   Edit3, 
   Share2, 
   Lock,
-  Languages
+  Languages,
+  Eye
 } from 'lucide-react';
+import { SeenByModal } from './SeenByModal';
+import { getSenderFriendlyName } from '../utils/senderHelper';
 
 interface MessageItemProps {
   message: Message;
@@ -26,10 +29,21 @@ interface MessageItemProps {
   onReply: (message: Message) => void;
   onEdit?: (message: Message) => void;
   onDelete: (messageId: string) => void;
+  onRequestDelete?: (message: Message) => void;
   onTranscribe: (messageId: string) => void;
   onTranslateMessage?: (messageId: string) => void;
+  onTogglePin?: (messageId: string) => void;
+  canPin?: boolean;
+  isGroupChat?: boolean;
   isTranslatingChat?: boolean;
   isHighlighted?: boolean;
+  onForward?: (message: Message) => void;
+  onJumpToMessage?: (messageId: string) => void;
+  // Selection mode props
+  isSelectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (messageId: string) => void;
+  onStartSelection?: (messageId: string) => void;
 }
 
 const QUICK_REACTIONS = ['👍', '❤️', '🔥', '🎉'];
@@ -42,10 +56,20 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   onReply,
   onEdit,
   onDelete,
+  onRequestDelete,
   onTranscribe,
   onTranslateMessage,
+  onTogglePin,
+  canPin = false,
+  isGroupChat = false,
   isTranslatingChat,
-  isHighlighted
+  isHighlighted,
+  onForward,
+  onJumpToMessage,
+  isSelectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+  onStartSelection
 }) => {
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [audioProgress, setAudioProgress] = useState(0);
@@ -55,52 +79,208 @@ export const MessageItem: React.FC<MessageItemProps> = ({
   const [isRoundVideoMuted, setIsRoundVideoMuted] = useState(true);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [showContextMenu, setShowContextMenu] = useState(false);
+  const [showSeenByModal, setShowSeenByModal] = useState(false);
+
+  // Long press timer ref for mobile & desktop hold-to-select
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isLongPressTriggeredRef = useRef(false);
+  const touchStartPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  const startLongPress = (clientX?: number, clientY?: number) => {
+    isLongPressTriggeredRef.current = false;
+    if (clientX !== undefined && clientY !== undefined) {
+      touchStartPosRef.current = { x: clientX, y: clientY };
+    }
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+    }
+    longPressTimerRef.current = setTimeout(() => {
+      isLongPressTriggeredRef.current = true;
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        try { navigator.vibrate(40); } catch (_) {}
+      }
+      if (onStartSelection) {
+        onStartSelection(message.id);
+      } else if (onToggleSelect) {
+        onToggleSelect(message.id);
+      }
+    }, 450); // 450ms threshold
+  };
+
+  const cancelLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    touchStartPosRef.current = null;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const touch = e.touches[0];
+    startLongPress(touch.clientX, touch.clientY);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (touchStartPosRef.current) {
+      const touch = e.touches[0];
+      const dx = Math.abs(touch.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(touch.clientY - touchStartPosRef.current.y);
+      if (dx > 10 || dy > 10) {
+        cancelLongPress();
+      }
+    }
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (isLongPressTriggeredRef.current) {
+      e.preventDefault();
+    }
+    cancelLongPress();
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button === 0) { // Primary left click hold
+      startLongPress(e.clientX, e.clientY);
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (touchStartPosRef.current) {
+      const dx = Math.abs(e.clientX - touchStartPosRef.current.x);
+      const dy = Math.abs(e.clientY - touchStartPosRef.current.y);
+      if (dx > 10 || dy > 10) {
+        cancelLongPress();
+      }
+    }
+  };
+
+  const handleMouseUp = () => {
+    cancelLongPress();
+  };
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    // Right click on message: enter selection mode or select
+    if (!isSelectionMode && onStartSelection) {
+      e.preventDefault();
+      onStartSelection(message.id);
+    }
+  };
+
+  const handleMessageClick = (e: React.MouseEvent) => {
+    if (isLongPressTriggeredRef.current) {
+      isLongPressTriggeredRef.current = false;
+      e.stopPropagation();
+      return;
+    }
+    if (isSelectionMode) {
+      e.stopPropagation();
+      onToggleSelect?.(message.id);
+    }
+  };
 
   const isOutgoing = message.isOutgoing;
 
   return (
     <div
       id={`msg-${message.id}`}
-      className={`group relative flex flex-col my-1 px-4 transition-all duration-300 ${
-        isOutgoing ? 'items-end' : 'items-start'
-      }`}
+      className={`group relative flex items-center my-1 px-2 sm:px-4 transition-all duration-200 select-none ${
+        isOutgoing ? 'justify-end' : 'justify-start'
+      } ${isSelected ? 'bg-cyan-500/10 rounded-2xl py-1' : ''}`}
       onMouseLeave={() => {
         setShowReactionPicker(false);
         setShowContextMenu(false);
+        cancelLongPress();
       }}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
+      onMouseUp={handleMouseUp}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onContextMenu={handleContextMenu}
+      onClick={handleMessageClick}
     >
-      {/* Sender name for incoming group messages */}
-      {!isOutgoing && message.type !== 'system' && (
-        <span className="text-[11px] font-bold text-cyan-400 mb-0.5 px-2">
-          {message.senderName}
-        </span>
+      {/* Checkbox indicator for selection mode */}
+      {isSelectionMode && (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleSelect?.(message.id);
+          }}
+          className={`flex-shrink-0 cursor-pointer p-1.5 transition-transform ${
+            isOutgoing ? 'order-last mr-1' : 'order-first ml-1'
+          }`}
+          title={isSelected ? 'لغو انتخاب پیام' : 'انتخاب پیام'}
+        >
+          <div
+            className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+              isSelected
+                ? 'bg-cyan-500 border-cyan-400 text-white shadow-md shadow-cyan-500/40 scale-105'
+                : 'border-slate-500/70 hover:border-cyan-400 bg-slate-900/80'
+            }`}
+          >
+            {isSelected && <Check className="w-3.5 h-3.5 stroke-[3]" />}
+          </div>
+        </div>
       )}
 
-      {/* Main Message Bubble */}
-      <div
-        className={`relative max-w-[85%] md:max-w-[70%] rounded-2xl px-3.5 py-2 shadow-sm text-sm transition-all duration-300 ${
-          isHighlighted
-            ? 'ring-2 ring-cyan-400 shadow-xl shadow-cyan-500/30 scale-[1.01] bg-cyan-950/70 border-cyan-400'
-            : message.type === 'system'
-            ? 'bg-slate-800/80 text-slate-300 text-xs text-center mx-auto my-2 border border-slate-700/50 max-w-md'
-            : isOutgoing
-            ? 'bg-gradient-to-r from-[#2b5278] to-[#1e3c5a] text-white rounded-br-xs border border-blue-600/30'
-            : 'bg-[#212d3b] text-slate-100 rounded-bl-xs border border-slate-700/40'
-        }`}
-      >
-        {/* Reply Preview */}
+      {/* Message Content Container */}
+      <div className={`flex flex-col ${isOutgoing ? 'items-end' : 'items-start'} max-w-[85%] md:max-w-[70%]`}>
+        {/* Sender name for incoming group messages */}
+        {!isOutgoing && message.type !== 'system' && (
+          <span className="text-[11px] font-bold text-cyan-400 mb-0.5 px-2">
+            {message.senderName}
+          </span>
+        )}
+
+        {/* Main Message Bubble */}
+        <div
+          className={`relative w-full rounded-2xl px-3.5 py-2 shadow-sm text-sm transition-all duration-300 ${
+            isSelected
+              ? 'ring-2 ring-cyan-400 shadow-lg shadow-cyan-500/20'
+              : isHighlighted
+              ? 'ring-2 ring-cyan-400 shadow-xl shadow-cyan-500/30 scale-[1.01] bg-cyan-950/70 border-cyan-400'
+              : message.type === 'system'
+              ? 'bg-slate-800/80 text-slate-300 text-xs text-center mx-auto my-2 border border-slate-700/50 max-w-md'
+              : isOutgoing
+              ? 'bg-gradient-to-r from-[#2b5278] to-[#1e3c5a] text-white rounded-br-xs border border-blue-600/30'
+              : 'bg-[#212d3b] text-slate-100 rounded-bl-xs border border-slate-700/40'
+          }`}
+          onDoubleClick={() => !isSelectionMode && onReply(message)}
+          title={isSelectionMode ? undefined : 'دوبار کلیک برای پاسخ (Double click to reply)'}
+        >
+        {/* Reply Preview with Smooth Jump */}
         {message.replyTo && (
-          <div className="mb-2 p-1.5 rounded-lg bg-black/20 border-r-2 border-cyan-400 text-xs">
-            <span className="font-bold text-cyan-300 block">{message.replyTo.senderName}</span>
-            <span className="text-slate-300 line-clamp-1">{message.replyTo.text}</span>
+          <div 
+            onClick={(e) => {
+              e.stopPropagation();
+              if (message.replyTo?.id && onJumpToMessage) {
+                onJumpToMessage(message.replyTo.id);
+              }
+            }}
+            className="mb-2 p-2 rounded-xl bg-black/30 hover:bg-black/45 border-r-3 border-cyan-400 text-xs cursor-pointer transition-all flex items-center justify-between gap-2 group/reply select-none shadow-sm"
+            title="پرش به پیام اصلی (Jump to quoted message)"
+          >
+            <div className="min-w-0 flex-1">
+              <span className="font-extrabold text-cyan-400 block text-[11px] group-hover/reply:underline">
+                {getSenderFriendlyName(message.replyTo.senderName, { currentUser })}
+              </span>
+              <span className="text-slate-300 text-[11px] line-clamp-1">
+                {message.replyTo.text || 'رسانه ارسالی'}
+              </span>
+            </div>
+            <CornerUpLeft className="w-3.5 h-3.5 text-cyan-400/80 group-hover/reply:text-cyan-400 flex-shrink-0" />
           </div>
         )}
 
-        {/* Forward Header */}
+        {/* Telegram Style Forward Header */}
         {message.forwardFrom && (
-          <div className="mb-1 text-[11px] text-cyan-300 flex items-center gap-1 font-medium">
-            <Share2 className="w-3 h-3" />
-            <span>نقل قول از {message.forwardFrom.originalSender}</span>
+          <div className="mb-2 pb-1 border-b border-white/10 flex items-center gap-1.5 text-xs text-cyan-300 font-medium">
+            <Share2 className="w-3.5 h-3.5 text-cyan-400 rotate-180 flex-shrink-0" />
+            <span>هدایت شده از </span>
+            <span className="font-extrabold text-white truncate">
+              {getSenderFriendlyName(message.forwardFrom.originalSender, { currentUser })}
+            </span>
           </div>
         )}
 
@@ -357,10 +537,37 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </div>
         ) : null}
 
-        {/* Bottom Metadata: Timestamp, Status */}
+        {/* Bottom Metadata: Timestamp, Status, Pinned Badge & Seen-By */}
         <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-slate-400 select-none">
+          {message.isPinned && (
+            <span 
+              className="flex items-center gap-0.5 text-cyan-300 bg-cyan-950/70 border border-cyan-800/80 px-1.5 py-0.2 rounded-full font-medium" 
+              title="پیام سنجاق شده"
+            >
+              <Pin className="w-2.5 h-2.5 rotate-45 text-cyan-400" />
+              <span className="text-[9px]">سنجاق</span>
+            </span>
+          )}
+
           {message.isEdited && <span>(ویرایش شده)</span>}
           <span>{message.timestamp}</span>
+
+          {/* Seen By status for group messages or when readers list exists */}
+          {message.seenBy && message.seenBy.length > 0 && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowSeenByModal(true);
+              }}
+              className="flex items-center gap-1 text-slate-300 hover:text-cyan-300 bg-slate-900/70 hover:bg-slate-900 border border-slate-700/60 px-1.5 py-0.5 rounded-full transition-all cursor-pointer hover:border-cyan-500/50"
+              title={`دیده شده توسط ${message.seenBy.length} نفر (کلیک کنید)`}
+            >
+              <Eye className="w-3 h-3 text-cyan-400" />
+              <span className="font-mono text-[10px] font-bold text-cyan-300">{message.seenBy.length}</span>
+            </button>
+          )}
+
           {isOutgoing && (
             <span>
               {message.status === 'read' ? (
@@ -395,9 +602,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           ))}
         </div>
       )}
+      </div>
 
-      {/* Floating Hover Context Actions */}
-      <div className="absolute top-0 right-2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 rounded-full px-2 py-1 shadow-lg z-10 backdrop-blur-sm">
+      {/* Floating Hover Context Actions (hidden when in multi-selection mode) */}
+      <div className={`absolute top-0 right-2 -translate-y-1/2 opacity-0 ${isSelectionMode ? 'hidden' : 'group-hover:opacity-100'} transition-opacity flex items-center gap-1 bg-slate-900/90 border border-slate-700/80 rounded-full px-2 py-1 shadow-lg z-10 backdrop-blur-sm`}>
         {/* React button */}
         <div className="relative">
           <button
@@ -450,6 +658,34 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           )}
         </div>
 
+        {/* Pin / Unpin Action (for Admins or in private chats) */}
+        {canPin && onTogglePin && (
+          <button
+            type="button"
+            onClick={() => onTogglePin(message.id)}
+            className={`p-1 transition-colors cursor-pointer ${
+              message.isPinned 
+                ? 'text-cyan-400 hover:text-rose-400 bg-cyan-500/10 rounded-md' 
+                : 'text-slate-400 hover:text-cyan-400'
+            }`}
+            title={message.isPinned ? 'برداشتن سنجاق (Unpin)' : 'سنجاق کردن پیام در بالای گروه (Pin)'}
+          >
+            <Pin className="w-3.5 h-3.5 rotate-45" />
+          </button>
+        )}
+
+        {/* Seen By Quick View (if group and has readers) */}
+        {message.seenBy && message.seenBy.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowSeenByModal(true)}
+            className="p-1 hover:text-cyan-400 text-slate-400 transition-colors cursor-pointer"
+            title={`مشاهده خوانندگان پیام (${message.seenBy.length} نفر)`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+          </button>
+        )}
+
         {/* Reply */}
         <button
           onClick={() => onReply(message)}
@@ -470,15 +706,36 @@ export const MessageItem: React.FC<MessageItemProps> = ({
           </button>
         )}
 
-        {/* Delete */}
+        {/* Forward */}
+        {onForward && (
+          <button
+            onClick={() => onForward(message)}
+            className="p-1 hover:text-cyan-400 text-slate-400 transition-colors cursor-pointer"
+            title="فوروارد پیام"
+          >
+            <Share2 className="w-3.5 h-3.5" />
+          </button>
+        )}
+
+        {/* Delete with 2-options modal */}
         <button
-          onClick={() => onDelete(message.id)}
+          onClick={() => onRequestDelete ? onRequestDelete(message) : onDelete(message.id)}
           className="p-1 hover:text-rose-400 text-slate-400 transition-colors cursor-pointer"
-          title="حذف برای دو طرف"
+          title="حذف پیام (دو طرفه یا یک طرفه)"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
       </div>
+
+      {/* Seen By Details Modal */}
+      {message.seenBy && message.seenBy.length > 0 && (
+        <SeenByModal
+          isOpen={showSeenByModal}
+          onClose={() => setShowSeenByModal(false)}
+          seenBy={message.seenBy}
+          messageTextSnippet={message.text || message.fileName}
+        />
+      )}
     </div>
   );
 };

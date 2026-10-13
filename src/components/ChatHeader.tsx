@@ -21,9 +21,13 @@ import {
   Check,
   X,
   CheckCircle2,
-  Info
+  Info,
+  Palette,
+  UserX,
+  Trash2
 } from 'lucide-react';
 import { GroupProfileModal } from './GroupProfileModal';
+import { getChatShareLink } from '../utils/linkHelper';
 
 interface ChatHeaderProps {
   chat: Chat;
@@ -40,6 +44,12 @@ interface ChatHeaderProps {
   onToggleChatAdmin?: (chatId: string, memberId: string, grantAdmin: boolean) => void;
   onToggleSearch?: () => void;
   isSearchOpen?: boolean;
+  onOpenWallpaperSettings?: () => void;
+  onClearHistory?: (chatId: string) => void;
+  onDeleteChat?: (chatId: string) => void;
+  onToggleBlockUser?: (userId: string, userName?: string) => void;
+  isBlocked?: boolean;
+  onUpdateChatPhotos?: (chatId: string, photos: string[], mainAvatar: string) => void;
 }
 
 export const ChatHeader: React.FC<ChatHeaderProps> = ({
@@ -56,7 +66,13 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   onUpdateBio,
   onToggleChatAdmin,
   onToggleSearch,
-  isSearchOpen
+  isSearchOpen,
+  onOpenWallpaperSettings,
+  onClearHistory,
+  onDeleteChat,
+  onToggleBlockUser,
+  isBlocked = false,
+  onUpdateChatPhotos
 }) => {
   const [showTopicMenu, setShowTopicMenu] = useState(false);
   const [showOptionsMenu, setShowOptionsMenu] = useState(false);
@@ -64,6 +80,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
   const [showGroupProfile, setShowGroupProfile] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'clear' | 'delete' | null>(null);
 
   const isGroup = chat?.type === 'group' || chat?.type === 'supergroup';
   const isChannel = chat?.type === 'channel';
@@ -126,21 +143,25 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           <button
             onClick={() => setShowGroupProfile(true)}
             className="flex items-center gap-2 sm:gap-3 min-w-0 text-right cursor-pointer group hover:opacity-90 transition-all text-inherit"
-            title="برای مشاهده بیو و اعضای گروه کلیک کنید"
+            title="برای مشاهده بیو و اعضای گفتگو کلیک کنید"
           >
             <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden border border-slate-700 group-hover:ring-2 group-hover:ring-cyan-400 group-hover:scale-105 transition-all shadow-md">
-                <img src={chat.avatar} alt={chat.title} className="w-full h-full object-cover" />
+              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden border border-slate-700 group-hover:ring-2 group-hover:ring-cyan-400 group-hover:scale-105 transition-all shadow-md bg-slate-800 flex items-center justify-center">
+                {isBlocked ? (
+                  <Lock className="w-5 h-5 text-slate-500" />
+                ) : (
+                  <img src={chat.avatar} alt={chat.title} className="w-full h-full object-cover" />
+                )}
               </div>
-              {chat.type === 'secret' && (
+              {chat.type === 'secret' && !isBlocked && (
                 <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] shadow">
                   <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                 </div>
               )}
-              {chat.type === 'private' && (
+              {chat.type === 'private' && !isBlocked && (
                 <div className="absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-400 border-2 border-[#1e293b]" />
               )}
-              {isCallActive && (
+              {isCallActive && !isBlocked && (
                 <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#1e293b] animate-ping" />
               )}
             </div>
@@ -150,7 +171,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 <h2 className="font-extrabold text-white text-xs sm:text-sm truncate group-hover:text-cyan-300 transition-colors">
                   {chat.title}
                 </h2>
-                {chat.boostLevel && chat.boostLevel > 0 && (
+                {isBlocked && (
+                  <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full font-bold">
+                    مسدود شده
+                  </span>
+                )}
+                {chat.boostLevel && chat.boostLevel > 0 && !isBlocked && (
                   <span className="text-[10px] px-1.5 py-0.2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-mono flex items-center gap-0.5 flex-shrink-0">
                     <Rocket className="w-2.5 h-2.5" />
                     <span>Lvl {chat.boostLevel}</span>
@@ -159,7 +185,9 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
               </div>
 
               <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-400 truncate">
-                {chat.type === 'secret' ? (
+                {isBlocked ? (
+                  <span className="text-slate-500">آخرین بازدید خیلی وقت پیش</span>
+                ) : chat.type === 'secret' ? (
                   <span className="text-emerald-400 flex items-center gap-1 truncate">
                     <Shield className="w-3 h-3 flex-shrink-0" />
                     <span>E2EE • حذف: {chat.secretChatTimer || 10}ثانیه</span>
@@ -440,11 +468,71 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                     <span>گفتگوی تصویری (ویدیو کال)</span>
                     <Video className="w-3.5 h-3.5 text-cyan-400" />
                   </button>
+                  {/* Wallpaper Setting */}
+                  {onOpenWallpaperSettings && (
+                    <button
+                      onClick={() => {
+                        setShowOptionsMenu(false);
+                        onOpenWallpaperSettings();
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
+                    >
+                      <span>تغییر پس‌زمینه چت (Wallpaper)</span>
+                      <Palette className="w-3.5 h-3.5 text-purple-400" />
+                    </button>
+                  )}
+
+                  {/* Block / Unblock User (Private Chat) */}
+                  {!isGroup && !isChannel && chat.id !== 'chat_saved' && onToggleBlockUser && (
+                    <button
+                      onClick={() => {
+                        setShowOptionsMenu(false);
+                        onToggleBlockUser(chat.id, chat.title);
+                        setToastMsg(isBlocked ? 'کاربر از لیست مسدودشده‌ها خارج شد' : 'کاربر مسدود شد');
+                        setTimeout(() => setToastMsg(null), 2500);
+                      }}
+                      className={`w-full text-right px-4 py-2.5 hover:bg-slate-800 flex items-center justify-between ${
+                        isBlocked ? 'text-emerald-400' : 'text-rose-400'
+                      }`}
+                    >
+                      <span>{isBlocked ? 'رفع مسدودی کاربر (Unblock)' : 'مسدود کردن کاربر (Block)'}</span>
+                      <UserX className="w-3.5 h-3.5" />
+                    </button>
+                  )}
+
+                  {/* Clear History */}
+                  {onClearHistory && (
+                    <button
+                      onClick={() => {
+                        setShowOptionsMenu(false);
+                        setConfirmAction('clear');
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
+                    >
+                      <span>پاکسازی تاریخچه گفتگو</span>
+                      <Trash2 className="w-3.5 h-3.5 text-slate-400" />
+                    </button>
+                  )}
+
+                  {/* Delete Chat */}
+                  {onDeleteChat && (
+                    <button
+                      onClick={() => {
+                        setShowOptionsMenu(false);
+                        setConfirmAction('delete');
+                      }}
+                      className="w-full text-right px-4 py-2.5 text-rose-400 hover:bg-rose-500/10 flex items-center justify-between"
+                    >
+                      <span>حذف کامل گفتگو</span>
+                      <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    </button>
+                  )}
+
                   <button
                     onClick={() => {
                       setShowOptionsMenu(false);
-                      setToastMsg('لینک دعوت کپی شد!');
-                      navigator.clipboard?.writeText?.(`https://t.me/+godfather_${chat.id}`);
+                      setToastMsg('لینک اختصاصی گفتگو کپی شد!');
+                      navigator.clipboard?.writeText?.(getChatShareLink(chat));
                       setTimeout(() => setToastMsg(null), 2500);
                     }}
                     className="w-full text-right px-4 py-2 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
@@ -538,6 +626,11 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         }}
         onUpdateBio={onUpdateBio}
         onToggleAdmin={(memberId, grantAdmin) => onToggleChatAdmin?.(chat.id, memberId, grantAdmin)}
+        onUpdateChatPhotos={onUpdateChatPhotos}
+        onToggleBlockChat={onToggleBlockUser}
+        isBlocked={isBlocked}
+        onClearHistory={onClearHistory}
+        onDeleteChat={onDeleteChat}
       />
 
       {/* Add Members / Channel Join Modal */}
@@ -595,12 +688,12 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
             <div className="space-y-1">
               <label className="text-xs text-slate-300 font-bold">لینک اختصاصی دعوت:</label>
               <div className="flex items-center bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-white">
-                <span className="text-slate-400 font-mono text-[11px] flex-1 truncate" dir="ltr">
-                  https://t.me/+godfather_{chat.id}
+                <span className="text-cyan-400 font-mono text-[11px] flex-1 truncate select-all" dir="ltr">
+                  {getChatShareLink(chat)}
                 </span>
                 <button
                   onClick={() => {
-                    navigator.clipboard?.writeText?.(`https://t.me/+godfather_${chat.id}`);
+                    navigator.clipboard?.writeText?.(getChatShareLink(chat));
                     setCopiedLink(true);
                     setTimeout(() => setCopiedLink(false), 2000);
                   }}
@@ -656,6 +749,62 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
                 className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold rounded-xl transition-colors cursor-pointer"
               >
                 بستن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Dialog for Clear History / Delete Chat */}
+      {confirmAction && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in select-none"
+          onClick={() => setConfirmAction(null)}
+        >
+          <div 
+            className="w-full max-w-sm bg-[#17212b] border border-slate-700/80 rounded-3xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-white text-sm">
+                  {confirmAction === 'clear' ? 'پاکسازی تاریخچه گفتگو' : 'حذف کامل گفتگو'}
+                </h4>
+                <p className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                  {chat.title}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {confirmAction === 'clear'
+                ? `آیا از پاکسازی تمام پیام‌های گفتگوی «${chat.title}» اطمینان دارید؟ تمام پیام‌ها برای شما حذف خواهند شد.`
+                : `آیا از حذف کامل گفتگوی «${chat.title}» اطمینان دارید؟ این گفتگو و تمام پیام‌های آن برای همیشه حذف خواهند شد.`
+              }
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmAction(null)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmAction === 'clear') {
+                    onClearHistory?.(chat.id);
+                  } else {
+                    onDeleteChat?.(chat.id);
+                  }
+                  setConfirmAction(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-rose-600/30"
+              >
+                {confirmAction === 'clear' ? 'پاکسازی پیام‌ها' : 'حذف گفتگو'}
               </button>
             </div>
           </div>

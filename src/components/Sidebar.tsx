@@ -31,11 +31,13 @@ import {
   Smartphone,
   Megaphone,
   X,
-  MessageSquare
+  MessageSquare,
+  Trash2
 } from 'lucide-react';
 import { INITIAL_CONTACTS } from '../data/mock-chats';
 import { checkPhoneInDatabase, normalizePhoneNumber, saveContactToRemote } from '../utils/apiSync';
 import { CreateChatModal } from './CreateChatModal';
+import { getAppInviteLink, getDisplayDomain } from '../utils/linkHelper';
 
 interface SidebarProps {
   chats: Chat[];
@@ -59,6 +61,11 @@ interface SidebarProps {
   onAddNewChat?: (chat: Chat) => void;
   usersList?: User[];
   onOpenPwaInstall?: () => void;
+  onDeleteChat?: (chatId: string) => void;
+  onClearHistory?: (chatId: string) => void;
+  onTogglePinChat?: (chatId: string) => void;
+  onToggleMuteChat?: (chatId: string) => void;
+  onToggleBlockUser?: (userIdOrChatId: string, userName?: string) => void;
 }
 
 interface FolderTabItem {
@@ -88,7 +95,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddContact,
   onAddNewChat,
   usersList,
-  onOpenPwaInstall
+  onOpenPwaInstall,
+  onDeleteChat,
+  onClearHistory,
+  onTogglePinChat,
+  onToggleMuteChat,
+  onToggleBlockUser
 }) => {
   // Navigation tabs at the bottom: 'chats' | 'contacts' | 'settings' | 'profile'
   const [activeBottomNav, setActiveBottomNav] = useState<'chats' | 'contacts' | 'settings' | 'profile'>('chats');
@@ -107,6 +119,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [inviteCopied, setInviteCopied] = useState(false);
   const [showCreateChatModal, setShowCreateChatModal] = useState(false);
   const [showFabMenu, setShowFabMenu] = useState(false);
+  const [chatMenuId, setChatMenuId] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    type: 'clear' | 'delete';
+    chatId: string;
+    chatTitle: string;
+  } | null>(null);
 
   const contactFileInputRef = useRef<HTMLInputElement>(null);
 
@@ -572,6 +590,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             ) : (
               filteredChats.map((chat) => {
                 const isActive = chat.id === activeChatId;
+                const isChatBlocked = Boolean(
+                  chat.isBlocked ||
+                  (currentUser?.blockedUserIds && currentUser.blockedUserIds.includes(chat.id))
+                );
 
               return (
                 <div
@@ -585,10 +607,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   {/* Avatar */}
                   <div className="relative flex-shrink-0">
-                    <div className="w-13 h-13 rounded-full overflow-hidden border border-slate-700/60">
-                      <img src={chat.avatar} alt={chat.title} className="w-full h-full object-cover" />
+                    <div className="w-13 h-13 rounded-full overflow-hidden border border-slate-700/60 bg-slate-800 flex items-center justify-center">
+                      {isChatBlocked ? (
+                        <Lock className="w-5 h-5 text-slate-500" />
+                      ) : (
+                        <img src={chat.avatar} alt={chat.title} className="w-full h-full object-cover" />
+                      )}
                     </div>
-                    {chat.type === 'secret' && (
+                    {chat.type === 'secret' && !isChatBlocked && (
                       <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px]">
                         <Lock className="w-2.5 h-2.5" />
                       </div>
@@ -602,7 +628,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span className="font-extrabold text-sm text-white truncate">
                           {chat.title}
                         </span>
-                        {chat.isVerified && (
+                        {isChatBlocked && (
+                          <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full font-bold">
+                            مسدود
+                          </span>
+                        )}
+                        {chat.isVerified && !isChatBlocked && (
                           <span className="text-cyan-400 text-xs">✓</span>
                         )}
                       </div>
@@ -618,20 +649,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                     <div className="flex items-center justify-between gap-1 mt-0.5">
                       <div className="text-xs text-slate-400 truncate max-w-[220px] sm:max-w-[240px]">
-                        {chat.draftText ? (
+                        {isChatBlocked ? (
+                          <span className="text-rose-400/90 font-medium">کاربر مسدود شده است</span>
+                        ) : chat.draftText ? (
                           <span className="text-rose-400 font-medium">پیش‌نویس: {chat.draftText}</span>
                         ) : (
                           <span>{chat.lastMessage?.text || 'گفتگوی خالی'}</span>
                         )}
                       </div>
 
-                      {/* Badges, Reaction, Pin, Mute */}
+                      {/* Badges, Reaction, Pin, Mute & Options */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         {chat.reactionPreview === '❤️' && (
                           <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
                         )}
                         {chat.isPinned && (
-                          <Pin className="w-3 h-3 text-slate-400" />
+                          <Pin className="w-3 h-3 text-cyan-400 rotate-45" />
                         )}
                         {chat.isMuted && (
                           <VolumeX className="w-3 h-3 text-slate-500" />
@@ -641,6 +674,105 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             {chat.unreadCount}
                           </span>
                         )}
+
+                        {/* Options button on hover */}
+                        <div className="relative">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setChatMenuId(chatMenuId === chat.id ? null : chat.id);
+                            }}
+                            className="p-1 text-slate-400 hover:text-white rounded-lg hover:bg-slate-700/60 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                            title="گزینه‌ها"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Chat Context Dropdown Menu */}
+                          {chatMenuId === chat.id && (
+                            <>
+                              <div 
+                                className="fixed inset-0 z-30" 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setChatMenuId(null);
+                                }} 
+                              />
+                              <div 
+                                className="absolute left-0 top-6 w-48 rounded-xl bg-slate-900 border border-slate-700 shadow-2xl py-1 z-40 text-xs"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {onTogglePinChat && (
+                                  <button
+                                    onClick={() => {
+                                      setChatMenuId(null);
+                                      onTogglePinChat(chat.id);
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
+                                  >
+                                    <span>{chat.isPinned ? 'برداشتن سنجاق' : 'سنجاق کردن چت'}</span>
+                                    <Pin className="w-3.5 h-3.5 text-cyan-400" />
+                                  </button>
+                                )}
+
+                                {onToggleMuteChat && (
+                                  <button
+                                    onClick={() => {
+                                      setChatMenuId(null);
+                                      onToggleMuteChat(chat.id);
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
+                                  >
+                                    <span>{chat.isMuted ? 'فعال‌سازی صدا' : 'بی‌صدا کردن'}</span>
+                                    <VolumeX className="w-3.5 h-3.5 text-slate-400" />
+                                  </button>
+                                )}
+
+                                {onToggleBlockUser && chat.type === 'private' && chat.id !== 'chat_saved' && (
+                                  <button
+                                    onClick={() => {
+                                      setChatMenuId(null);
+                                      onToggleBlockUser(chat.id, chat.title);
+                                    }}
+                                    className={`w-full text-right px-3 py-2 flex items-center justify-between ${
+                                      isChatBlocked ? 'text-emerald-400 hover:bg-slate-800' : 'text-rose-400 hover:bg-slate-800'
+                                    }`}
+                                  >
+                                    <span>{isChatBlocked ? 'رفع مسدودی کاربر' : 'مسدود کردن مخاطب'}</span>
+                                    <UserX className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+
+                                {onClearHistory && (
+                                  <button
+                                    onClick={() => {
+                                      setChatMenuId(null);
+                                      setConfirmModal({ type: 'clear', chatId: chat.id, chatTitle: chat.title });
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-slate-200 hover:bg-slate-800 flex items-center justify-between"
+                                  >
+                                    <span>پاکسازی تاریخچه</span>
+                                    <Trash2 className="w-3.5 h-3.5 text-slate-400" />
+                                  </button>
+                                )}
+
+                                {onDeleteChat && (
+                                  <button
+                                    onClick={() => {
+                                      setChatMenuId(null);
+                                      setConfirmModal({ type: 'delete', chatId: chat.id, chatTitle: chat.title });
+                                    }}
+                                    className="w-full text-right px-3 py-2 text-rose-400 hover:bg-rose-500/10 flex items-center justify-between"
+                                  >
+                                    <span>حذف گفتگو</span>
+                                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                                  </button>
+                                )}
+                              </div>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1011,17 +1143,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
 
             <div className="space-y-2 pt-2">
+              <div 
+                onClick={() => {
+                  navigator.clipboard.writeText(getAppInviteLink());
+                  setInviteCopied(true);
+                  setTimeout(() => setInviteCopied(false), 3000);
+                }}
+                className="p-2.5 rounded-xl bg-slate-900 border border-slate-700 text-cyan-400 font-mono text-xs truncate cursor-pointer hover:border-cyan-400 select-all"
+                dir="ltr"
+                title="کلیک برای کپی"
+              >
+                {getAppInviteLink()}
+              </div>
+
               <button
                 type="button"
                 onClick={() => {
-                  navigator.clipboard.writeText(window.location.origin);
+                  navigator.clipboard.writeText(getAppInviteLink());
                   setInviteCopied(true);
                   setTimeout(() => setInviteCopied(false), 3000);
                 }}
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 cursor-pointer transition-all"
               >
                 {inviteCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                <span>{inviteCopied ? 'لینک دعوت تلگرام کپی شد!' : 'ارسال دعوت‌نامه (کپی لینک تلگرام)'}</span>
+                <span>{inviteCopied ? 'لینک دعوت تلگرام کپی شد!' : 'کپی لینک دعوت'}</span>
               </button>
 
               <button
@@ -1050,6 +1195,62 @@ export const Sidebar: React.FC<SidebarProps> = ({
         existingChats={chats}
         currentUser={currentUser}
       />
+
+      {/* Confirmation Dialog for Clear History / Delete Chat */}
+      {confirmModal && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in select-none"
+          onClick={() => setConfirmModal(null)}
+        >
+          <div 
+            className="w-full max-w-sm bg-[#17212b] border border-slate-700/80 rounded-3xl p-5 shadow-2xl space-y-4 animate-in zoom-in-95 duration-150 text-right"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-rose-500/15 text-rose-400 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-extrabold text-white text-sm">
+                  {confirmModal.type === 'clear' ? 'پاکسازی تاریخچه گفتگو' : 'حذف کامل گفتگو'}
+                </h4>
+                <p className="text-[11px] text-slate-400 truncate max-w-[200px]">
+                  {confirmModal.chatTitle}
+                </p>
+              </div>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              {confirmModal.type === 'clear' 
+                ? `آیا از پاکسازی تمام پیام‌های گفتگوی «${confirmModal.chatTitle}» اطمینان دارید؟ تمام پیام‌های این گفتگو پاک خواهند شد.`
+                : `آیا از حذف کامل گفتگوی «${confirmModal.chatTitle}» اطمینان دارید؟ این گفتگو و تمام پیام‌های آن برای همیشه حذف خواهند شد.`
+              }
+            </p>
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmModal(null)}
+                className="px-4 py-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 text-xs font-bold transition-all cursor-pointer"
+              >
+                انصراف
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirmModal.type === 'clear') {
+                    onClearHistory?.(confirmModal.chatId);
+                  } else {
+                    onDeleteChat?.(confirmModal.chatId);
+                  }
+                  setConfirmModal(null);
+                }}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all cursor-pointer shadow-lg shadow-rose-600/30"
+              >
+                {confirmModal.type === 'clear' ? 'پاکسازی پیام‌ها' : 'حذف کامل گفتگو'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
