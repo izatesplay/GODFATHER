@@ -171,7 +171,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       username: cleanUsername,
       phone: newPhone.trim(),
       avatar: newUserAvatar,
-      bio: 'کاربر ایجاد شده توسط پنل مدیریت ارشد',
+      bio: '',
       isPremium: newIsPremium,
       emojiStatus: newIsPremium ? '⭐' : undefined,
       customColor: 'blue',
@@ -336,8 +336,16 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                               alt={u.name}
                               className="w-12 h-12 rounded-full object-cover border-2 border-slate-700"
                             />
+                            <div
+                              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-slate-900 transition-all duration-300 ${
+                                u.isOnline
+                                  ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)] ring-1 ring-emerald-500/50'
+                                  : 'bg-slate-700 border border-slate-600/60 opacity-40 shadow-inner'
+                              }`}
+                              title={u.isOnline ? 'آنلاین' : 'خاموش (آفلاین)'}
+                            />
                             {u.isPremium && (
-                              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-400 text-black flex items-center justify-center text-[10px] font-bold shadow">
+                              <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-amber-400 text-black flex items-center justify-center text-[10px] font-bold shadow">
                                 ★
                               </div>
                             )}
@@ -346,6 +354,19 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="font-extrabold text-white text-sm">{u.name}</span>
+                              <span
+                                className={`w-2 h-2 rounded-full transition-all duration-300 ${
+                                  u.isOnline
+                                    ? 'bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.9)]'
+                                    : 'bg-slate-700 opacity-40 border border-slate-600/50'
+                                }`}
+                                title={u.isOnline ? 'آنلاین' : 'خاموش (آفلاین)'}
+                              />
+                              <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                                u.isOnline ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-800 text-slate-400'
+                              }`}>
+                                {u.isOnline ? 'آنلاین' : 'آفلاین'}
+                              </span>
                               {u.isPremium && (
                                 <span className="text-[10px] px-2 py-0.2 bg-amber-400/20 text-amber-300 font-bold rounded-full border border-amber-400/30 flex items-center gap-0.5">
                                   <Sparkles className="w-2.5 h-2.5" />

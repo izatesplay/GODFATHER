@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Chat, Message, Story, User, MiniApp, Contact, ChatFolder, ChatMember, CallMusicTrack } from './types/telegram';
 import { 
   ADMIN_USER,
@@ -16,7 +16,9 @@ import {
   syncAllToRemote, 
   saveMessageToRemote, 
   saveChatToRemote, 
-  saveStoryToRemote 
+  saveStoryToRemote,
+  updateUserPresenceOnRemote,
+  deleteChatOnRemote
 } from './utils/apiSync';
 import { translateText } from './utils/translator';
 import { Sidebar } from './components/Sidebar';
@@ -60,10 +62,24 @@ const getInitialState = <T,>(key: string, defaultValue: T): T => {
 };
 
 export default function App() {
-  // Default to Super Admin (09921758505) with persistence
-  const [currentUser, setCurrentUser] = useState<User>(() => {
-    const saved = getInitialState<User | null>('user', ADMIN_USER);
-    return (saved && typeof saved === 'object' && saved.id) ? saved : ADMIN_USER;
+  // Authenticated User Session - ONLY loads if user previously logged in
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    try {
+      const saved = localStorage.getItem('cp_user');
+      if (saved && saved !== 'null' && saved !== 'undefined') {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object' && parsed.id) {
+          return {
+            ...parsed,
+            isOnline: true,
+            lastSeen: 'هم‌اکنون آنلاین'
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Error parsing cp_user:', e);
+    }
+    return null;
   });
   const [usersList, setUsersList] = useState<User[]>(() => {
     const saved = getInitialState<User[]>('users_list', INITIAL_SYSTEM_USERS);
@@ -71,11 +87,15 @@ export default function App() {
   });
   const [chats, setChats] = useState<Chat[]>(() => {
     const saved = getInitialState<Chat[]>('chats', INITIAL_CHATS);
-    return (Array.isArray(saved) && saved.length > 0) ? saved : INITIAL_CHATS;
+    const valid = (Array.isArray(saved) && saved.length > 0) ? saved : INITIAL_CHATS;
+    const clean = valid.filter((c) => c.id !== 'chat_godfather_group');
+    return clean.length > 0 ? clean : INITIAL_CHATS;
   });
   const [activeChatId, setActiveChatId] = useState<string>(() => {
     const savedChats = getInitialState<Chat[]>('chats', INITIAL_CHATS);
-    return (Array.isArray(savedChats) && savedChats[0]?.id) || INITIAL_CHATS[0].id;
+    const valid = (Array.isArray(savedChats) && savedChats.length > 0 ? savedChats : INITIAL_CHATS)
+      .filter((c) => c.id !== 'chat_godfather_group');
+    return valid[0]?.id || 'chat_saved';
   });
   const [messages, setMessages] = useState<Record<string, Message[]>>(() => {
     const saved = getInitialState<Record<string, Message[]>>('messages', INITIAL_MESSAGES);
@@ -94,7 +114,7 @@ export default function App() {
     return (Array.isArray(saved) && saved.length > 0) ? saved : DEFAULT_FOLDERS;
   });
   const [miniApps] = useState<MiniApp[]>(INITIAL_MINI_APPS);
-  const [userStars, setUserStars] = useState<number>(() => currentUser?.starsBalance || 50000);
+  const [userStars, setUserStars] = useState<number>(() => currentUser?.starsBalance || 100);
   const [chatWallpaper, setChatWallpaper] = useState<ChatWallpaper>(() => {
     const saved = getInitialState<ChatWallpaper>('chat_wallpaper', DEFAULT_WALLPAPER);
     return (saved && saved.value) ? saved : DEFAULT_WALLPAPER;
@@ -136,7 +156,7 @@ export default function App() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<any>('main');
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [isAuthOpen, setIsAuthOpen] = useState(false);
+  const [isAuthOpen, setIsAuthOpen] = useState(!currentUser);
   const [isCallOpen, setIsCallOpen] = useState(false);
   const [callType, setCallType] = useState<'audio' | 'video'>('audio');
   const [isStoryViewerOpen, setIsStoryViewerOpen] = useState(false);
@@ -211,7 +231,7 @@ export default function App() {
   const rawChatMessages = (activeChat?.id && messages && messages[activeChat.id]) ? messages[activeChat.id] : [];
   const currentChatMessages = rawChatMessages.filter(
     (m) =>
-      !m.deletedForUserIds?.includes(currentUser.id) &&
+      (!currentUser || !m.deletedForUserIds?.includes(currentUser.id)) &&
       !deletedForMeIds.includes(m.id)
   );
 
@@ -360,9 +380,13 @@ export default function App() {
   // Auto-save local changes to localStorage
   useEffect(() => {
     try {
-      localStorage.setItem('cp_user', JSON.stringify(currentUser));
+      if (currentUser) {
+        localStorage.setItem('cp_user', JSON.stringify(currentUser));
+      } else {
+        localStorage.removeItem('cp_user');
+      }
       localStorage.setItem('cp_users_list', JSON.stringify(usersList));
-      localStorage.setItem('cp_chats', JSON.stringify(chats));
+      localStorage.setItem('cp_chats', JSON.stringify(chats.filter((c) => c.id !== 'chat_godfather_group')));
       localStorage.setItem('cp_messages', JSON.stringify(messages));
       localStorage.setItem('cp_stories', JSON.stringify(stories));
       localStorage.setItem('cp_contacts', JSON.stringify(contacts));
@@ -373,63 +397,189 @@ export default function App() {
     }
   }, [currentUser, usersList, chats, messages, stories, contacts, folders, chatWallpaper]);
 
-  // Initial bidirectional sync with api.php
-  useEffect(() => {
-    let isMounted = true;
-    const initSync = async () => {
+  // Reusable cross-device database synchronizer
+  const syncFromRemote = useCallback(async () => {
+    try {
       const health = await checkApiHealth();
-      if (health.success) {
-        const remote = await fetchRemoteData();
-        if (remote.success && remote.data && isMounted) {
-          if (remote.data.users?.length) setUsersList(remote.data.users);
-          if (remote.data.chats?.length) {
-            setChats((prev) => {
-              const remoteMap = new Map(remote.data!.chats.map(rc => [rc.id, rc]));
-              const updated = prev.map((local) => {
-                const rem = remoteMap.get(local.id);
-                if (!rem) return local;
-                return {
-                  ...local,
-                  ...rem,
-                  creatorId: rem.creatorId || local.creatorId,
-                  isUserAdmin: rem.isUserAdmin !== undefined ? rem.isUserAdmin : (local.isUserAdmin ?? true),
-                  members: (rem.members && rem.members.length > 0) ? rem.members : local.members,
-                  activeCall: rem.activeCall || local.activeCall
-                };
-              });
-              const deletedIds: string[] = JSON.parse(localStorage.getItem('cp_deleted_chat_ids') || '[]');
-              for (const rc of remote.data!.chats) {
-                if (!prev.some(p => p.id === rc.id) && !deletedIds.includes(rc.id)) {
-                  updated.push(rc);
-                }
+      if (!health.success) return;
+      const remote = await fetchRemoteData();
+      if (remote.success && remote.data) {
+        if (remote.data.users?.length) {
+          setUsersList((prev) => {
+            const map = new Map(prev.map((u) => [u.id, u]));
+            for (const ru of remote.data!.users) {
+              if (currentUser && ru.id === currentUser.id) {
+                map.set(ru.id, { ...ru, isOnline: true, lastSeen: 'هم‌اکنون آنلاین' });
+              } else {
+                map.set(ru.id, ru);
               }
-              return updated;
+            }
+            return Array.from(map.values());
+          });
+        }
+        if (remote.data.chats?.length) {
+          setChats((prev) => {
+            const cleanRemoteChats = remote.data!.chats.filter((rc) => rc.id !== 'chat_godfather_group');
+            const remoteMap = new Map(cleanRemoteChats.map((rc) => [rc.id, rc]));
+            const updated = prev.filter((c) => c.id !== 'chat_godfather_group').map((local) => {
+              const rem = remoteMap.get(local.id);
+              if (!rem) return local;
+              return {
+                ...local,
+                ...rem,
+                creatorId: rem.creatorId || local.creatorId,
+                isUserAdmin: rem.isUserAdmin !== undefined ? rem.isUserAdmin : (local.isUserAdmin ?? true),
+                members: (rem.members && rem.members.length > 0) ? rem.members : local.members,
+                activeCall: rem.activeCall || local.activeCall
+              };
             });
-          }
-          if (remote.data.messages && Object.keys(remote.data.messages).length) {
-            setMessages((prev) => {
-              const merged = { ...prev };
-              for (const [cId, remoteList] of Object.entries(remote.data!.messages)) {
-                if (!merged[cId] || merged[cId].length === 0) {
-                  merged[cId] = remoteList;
-                } else {
-                  const localSet = new Set(merged[cId].map((m) => m.id));
-                  const nonDuplicates = remoteList.filter((m) => !localSet.has(m.id));
+            const deletedIds: string[] = JSON.parse(localStorage.getItem('cp_deleted_chat_ids') || '[]');
+            for (const rc of cleanRemoteChats) {
+              if (!prev.some((p) => p.id === rc.id) && !deletedIds.includes(rc.id)) {
+                updated.push(rc);
+              }
+            }
+            return updated;
+          });
+        }
+        if (remote.data.messages && Object.keys(remote.data.messages).length) {
+          setMessages((prev) => {
+            const merged = { ...prev };
+            for (const [cId, remoteList] of Object.entries(remote.data!.messages)) {
+              if (!merged[cId] || merged[cId].length === 0) {
+                merged[cId] = remoteList;
+              } else {
+                const localSet = new Set(merged[cId].map((m) => m.id));
+                const nonDuplicates = remoteList.filter((m) => !localSet.has(m.id));
+                if (nonDuplicates.length > 0) {
                   merged[cId] = [...merged[cId], ...nonDuplicates];
                 }
               }
-              return merged;
-            });
-          }
-          if (remote.data.contacts?.length) setContacts(remote.data.contacts);
-          if (remote.data.stories?.length) setStories(remote.data.stories);
-          if (remote.data.folders?.length) setFolders(remote.data.folders);
+            }
+            return merged;
+          });
         }
+        if (remote.data.contacts?.length) {
+          setContacts((prev) => {
+            const map = new Map(prev.map((c) => [c.id, c]));
+            for (const cnt of remote.data!.contacts) {
+              map.set(cnt.id, cnt);
+            }
+            return Array.from(map.values());
+          });
+        }
+        if (remote.data.stories?.length) setStories(remote.data.stories);
+        if (remote.data.folders?.length) setFolders(remote.data.folders);
+      }
+    } catch (e) {
+      console.warn('Sync from remote error:', e);
+    }
+  }, [currentUser?.id]);
+
+  // Live Presence Tracking: online only when active on site, offline on leave / blur / unload
+  useEffect(() => {
+    if (!currentUser) return;
+
+    const markUserOnline = () => {
+      if (currentUser?.id) {
+        updateUserPresenceOnRemote(currentUser.id, true, 'هم‌اکنون آنلاین');
+      }
+      setCurrentUser((prev) => {
+        if (!prev) return null;
+        const updated = { ...prev, isOnline: true, lastSeen: 'هم‌اکنون آنلاین' };
+        try {
+          localStorage.setItem('cp_user', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setUsersList((prev) =>
+        prev.map((u) => (u.id === currentUser.id ? { ...u, isOnline: true, lastSeen: 'هم‌اکنون آنلاین' } : u))
+      );
+    };
+
+    const markUserOffline = () => {
+      if (currentUser?.id) {
+        updateUserPresenceOnRemote(currentUser.id, false, 'آخرین بازدید اخیراً');
+      }
+      setCurrentUser((prev) => {
+        if (!prev) return null;
+        const updated = { ...prev, isOnline: false, lastSeen: 'آخرین بازدید اخیراً' };
+        try {
+          localStorage.setItem('cp_user', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+      setUsersList((prev) => {
+        const next = prev.map((u) => (u.id === currentUser.id ? { ...u, isOnline: false, lastSeen: 'آخرین بازدید اخیراً' } : u));
+        try {
+          localStorage.setItem('cp_users_list', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        markUserOffline();
+      } else if (document.visibilityState === 'visible') {
+        markUserOnline();
       }
     };
-    initSync();
-    return () => { isMounted = false; };
-  }, []);
+
+    const handlePageUnload = () => {
+      markUserOffline();
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', handlePageUnload);
+    window.addEventListener('beforeunload', handlePageUnload);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', handlePageUnload);
+      window.removeEventListener('beforeunload', handlePageUnload);
+    };
+  }, [currentUser?.id]);
+
+  // Initial and periodic bidirectional sync with database
+  useEffect(() => {
+    syncFromRemote();
+  }, [syncFromRemote]);
+
+  // Periodic polling every 4s to keep all browsers & devices in sync + live heartbeat
+  useEffect(() => {
+    if (!currentUser) return;
+    // Send immediate heartbeat on login / mount
+    updateUserPresenceOnRemote(currentUser.id, true, 'هم‌اکنون آنلاین');
+
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        // Send heartbeat ping to keep user online
+        updateUserPresenceOnRemote(currentUser.id, true, 'هم‌اکنون آنلاین');
+        // Poll latest updates from remote database
+        syncFromRemote();
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [currentUser?.id, syncFromRemote]);
+
+  // Debounced auto-save to remote database whenever chats or messages are updated
+  useEffect(() => {
+    if (!currentUser) return;
+    const timer = setTimeout(() => {
+      const cleanChats = chats.filter((c) => c.id !== 'chat_godfather_group');
+      syncAllToRemote({
+        users: usersList,
+        chats: cleanChats,
+        messages,
+        contacts,
+        stories,
+        folders
+      }).catch((e) => console.warn('Debounced sync to remote error:', e));
+    }, 1500);
+
+    return () => clearTimeout(timer);
+  }, [chats, messages, currentUser?.id]);
 
   const handleSyncDatabase = async () => {
     const payload = {
@@ -487,7 +637,7 @@ export default function App() {
       voiceWaveform?: number[];
     }
   ) => {
-    if (isCurrentChatBlocked) {
+    if (!currentUser || isCurrentChatBlocked) {
       return;
     }
     const newMessageId = `msg_${Date.now()}`;
@@ -625,7 +775,7 @@ export default function App() {
     if (userText.includes('/start')) {
       reply = `خوش آمدید! دستیار هوشمند تلگرام در خدمت شماست.\n• /premium : بررسی امکانات پریمیوم\n• /stars : دریافت ستاره‌های آزمایشی\n• /help : راهنما`;
     } else if (userText.includes('/premium')) {
-      reply = `✨ وضعیت اکانت: ${currentUser.isPremium ? 'پریمیوم فعال' : 'استاندارد رایگان'}\nسقف آپلود: ${currentUser.isPremium ? '۴ گیگابایت' : '۲ گیگابایت'}\nمبدل ویس: فعال`;
+      reply = `✨ وضعیت اکانت: ${currentUser?.isPremium ? 'پریمیوم فعال' : 'استاندارد رایگان'}\nسقف آپلود: ${currentUser?.isPremium ? '۴ گیگابایت' : '۲ گیگابایت'}\nمبدل ویس: فعال`;
     } else if (userText.includes('/stars')) {
       setUserStars((prev) => prev + 50);
       reply = `⭐ ۵۰ ستاره تلگرام به کیف‌پول شما افزوده شد! موجودی فعلی: ${userStars + 50} Stars`;
@@ -817,7 +967,7 @@ export default function App() {
 
   // 2. Delete messages only for me (یک طرفه)
   const handleConfirmDeleteForMeOnly = () => {
-    if (!deleteModalMessages || deleteModalMessages.length === 0) return;
+    if (!currentUser || !deleteModalMessages || deleteModalMessages.length === 0) return;
     const idsToDelete = new Set(deleteModalMessages.map((m) => m.id));
 
     try {
@@ -845,6 +995,7 @@ export default function App() {
 
   // Start Audio/Video Call (Group, Channel or 1-on-1)
   const handleStartCall = (type: 'audio' | 'video') => {
+    if (!currentUser) return;
     setCallType(type);
     const isGroupOrChannel = activeChat.type === 'group' || activeChat.type === 'supergroup' || activeChat.type === 'channel';
 
@@ -928,6 +1079,7 @@ export default function App() {
   // Leave Call without ending for others
   const handleLeaveCall = () => {
     setIsCallOpen(false);
+    if (!currentUser) return;
     const isGroupOrChannel = activeChat.type === 'group' || activeChat.type === 'supergroup' || activeChat.type === 'channel';
     if (isGroupOrChannel && activeChat.activeCall?.isActive) {
       setChats((prev) =>
@@ -963,6 +1115,7 @@ export default function App() {
 
   // 1. Add song to call queue (Any member can suggest/add a track)
   const handleAddSongToCallQueue = (track: CallMusicTrack, autoPlayIfAdmin = false) => {
+    if (!currentUser) return;
     setChats((prev) =>
       prev.map((c) => {
         if (c.id === activeChatId) {
@@ -1191,6 +1344,7 @@ export default function App() {
 
   // Publish Story
   const handlePublishStory = (newStoryData: Partial<Story>) => {
+    if (!currentUser) return;
     const newStory: Story = {
       id: `story_${Date.now()}`,
       userId: currentUser.id,
@@ -1212,7 +1366,8 @@ export default function App() {
 
   // Update user profile
   const handleUpdateUser = (updated: Partial<User>) => {
-    setCurrentUser((prev) => ({ ...prev, ...updated }));
+    if (!currentUser) return;
+    setCurrentUser((prev) => (prev ? { ...prev, ...updated } : null));
     setUsersList((prev) =>
       prev.map((u) => (u.id === currentUser.id ? { ...u, ...updated } : u))
     );
@@ -1224,8 +1379,8 @@ export default function App() {
       prev.map((u) => {
         if (u.id === userId) {
           const newPremium = !u.isPremium;
-          if (currentUser.id === userId) {
-            setCurrentUser((curr) => ({ ...curr, isPremium: newPremium }));
+          if (currentUser?.id === userId) {
+            setCurrentUser((curr) => (curr ? { ...curr, isPremium: newPremium } : null));
           }
           return { ...u, isPremium: newPremium };
         }
@@ -1238,8 +1393,8 @@ export default function App() {
     setUsersList((prev) =>
       prev.map((u) => {
         if (u.id === userId) {
-          if (currentUser.id === userId) {
-            setCurrentUser((curr) => ({ ...curr, role: newRole }));
+          if (currentUser?.id === userId) {
+            setCurrentUser((curr) => (curr ? { ...curr, role: newRole } : null));
           }
           return { ...u, role: newRole };
         }
@@ -1253,9 +1408,9 @@ export default function App() {
       prev.map((u) => {
         if (u.id === userId) {
           const newBalance = (u.starsBalance || 0) + amount;
-          if (currentUser.id === userId) {
+          if (currentUser?.id === userId) {
             setUserStars(newBalance);
-            setCurrentUser((curr) => ({ ...curr, starsBalance: newBalance }));
+            setCurrentUser((curr) => (curr ? { ...curr, starsBalance: newBalance } : null));
           }
           return { ...u, starsBalance: newBalance };
         }
@@ -1279,7 +1434,7 @@ export default function App() {
       role: 'member',
       roleTitle: 'عضو عادی',
       isOnline: true,
-      bio: 'عضو افزوده شده به گفتگو'
+      bio: ''
     };
 
     setChats((prev) =>
@@ -1312,6 +1467,7 @@ export default function App() {
       ...prev,
       [chatId]: [...(prev[chatId] || []), systemMsg]
     }));
+    saveMessageToRemote(systemMsg);
   };
 
   const handleToggleChatAdmin = (chatId: string, memberId: string, grantAdmin: boolean) => {
@@ -1362,6 +1518,7 @@ export default function App() {
   };
 
   const handleBroadcastMessage = (title: string, content: string, pinToChannels: boolean) => {
+    if (!currentUser) return;
     const broadcastText = `📢 [اطلاعیه مدیریت ارشد]: ${title}\n\n${content}`;
     // Broadcast to supergroup forum and official channel
     const targets = ['chat_supergroup_forum', 'chat_channel_official'];
@@ -1395,16 +1552,120 @@ export default function App() {
     );
   };
 
-  // Handle Login success
-  const handleLoginSuccess = (user: User) => {
-    setCurrentUser(user);
+  // Handle Login / Registration success: immediately loads account data from database across any browser/device
+  const handleLoginSuccess = async (user: User) => {
+    const liveUser: User = {
+      ...user,
+      isOnline: true,
+      lastSeen: 'هم‌اکنون آنلاین'
+    };
+    setCurrentUser(liveUser);
+    try {
+      localStorage.setItem('cp_user', JSON.stringify(liveUser));
+    } catch {}
+
+    // Immediately mark user as online on remote server
+    updateUserPresenceOnRemote(liveUser.id, true, 'هم‌اکنون آنلاین');
+
+    // Add or update user in usersList so they immediately appear in Admin Panel user list!
+    setUsersList((prev) => {
+      const existsIndex = prev.findIndex(
+        (u) =>
+          u.id === user.id ||
+          u.phone === user.phone ||
+          (u.username && user.username && u.username.toLowerCase() === user.username.toLowerCase())
+      );
+      let nextList: User[];
+      if (existsIndex >= 0) {
+        nextList = [...prev];
+        nextList[existsIndex] = { ...nextList[existsIndex], ...liveUser };
+      } else {
+        nextList = [liveUser, ...prev];
+      }
+      try {
+        localStorage.setItem('cp_users_list', JSON.stringify(nextList));
+      } catch {}
+      return nextList;
+    });
+
     if (user.starsBalance) {
       setUserStars(user.starsBalance);
     }
+
+    // Immediately load all database chats, messages, and content for this account!
+    try {
+      const remote = await fetchRemoteData();
+      if (remote.success && remote.data) {
+        if (remote.data.users?.length) {
+          setUsersList(remote.data.users.map((u) => u.id === liveUser.id ? { ...u, isOnline: true, lastSeen: 'هم‌اکنون آنلاین' } : u));
+        }
+        if (remote.data.chats?.length) {
+          const cleanChats = remote.data.chats.filter((c) => c.id !== 'chat_godfather_group');
+          if (cleanChats.length > 0) {
+            setChats(cleanChats);
+            setActiveChatId(cleanChats[0].id);
+          }
+        }
+        if (remote.data.messages && Object.keys(remote.data.messages).length > 0) {
+          setMessages(remote.data.messages);
+        }
+        if (remote.data.contacts?.length) {
+          setContacts(remote.data.contacts);
+        }
+        if (remote.data.stories?.length) {
+          setStories(remote.data.stories);
+        }
+        if (remote.data.folders?.length) {
+          setFolders(remote.data.folders);
+        }
+      }
+    } catch (e) {
+      console.warn('Initial remote load error after login:', e);
+    }
+
+    setIsAuthOpen(false);
+  };
+
+  // Secure Logout: marks user offline, clears session, closes modals, blocks access until login
+  const handleLogout = () => {
+    if (currentUser) {
+      // Mark user offline on server immediately
+      updateUserPresenceOnRemote(currentUser.id, false, 'آخرین بازدید اخیراً');
+
+      setUsersList((prev) => {
+        const next = prev.map((u) =>
+          u.id === currentUser.id ? { ...u, isOnline: false, lastSeen: 'آخرین بازدید اخیراً' } : u
+        );
+        try {
+          localStorage.setItem('cp_users_list', JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    }
+    try {
+      localStorage.removeItem('cp_user');
+      localStorage.removeItem('cp_chats');
+      localStorage.removeItem('cp_messages');
+    } catch {}
+    setCurrentUser(null);
+    setChats(INITIAL_CHATS);
+    setActiveChatId('chat_saved');
+    setMessages(INITIAL_MESSAGES);
+    setIsAdminPanelOpen(false);
+    setIsSettingsOpen(false);
+    setIsCallOpen(false);
+    setIsStoryViewerOpen(false);
+    setIsStoryCreatorOpen(false);
+    setIsChunkUploaderOpen(false);
+    setIsMiniAppOpen(false);
+    setIsMiniAppsDirectoryOpen(false);
+    setIsArchitectureOpen(false);
+    setIsAuthOpen(true);
   };
 
   // Delete chat permanently (ensuring chats remain persistent until explicitly deleted)
   const handleDeleteChat = (chatId: string) => {
+    deleteChatOnRemote(chatId);
     try {
       const deletedIds: string[] = JSON.parse(localStorage.getItem('cp_deleted_chat_ids') || '[]');
       if (!deletedIds.includes(chatId)) {
@@ -1458,6 +1719,7 @@ export default function App() {
 
   // Block/Unblock user
   const handleToggleBlockUser = (userIdOrChatId: string, userName?: string) => {
+    if (!currentUser) return;
     const currentBlocked = currentUser.blockedUserIds || [];
     const isCurrentlyBlocked = currentBlocked.includes(userIdOrChatId);
     const updatedBlocked = isCurrentlyBlocked
@@ -1478,7 +1740,7 @@ export default function App() {
 
   // Forward messages to any chat (supports single or multi-message forward)
   const handleForwardMessages = (targetChatId: string, msgsToForward: Message[]) => {
-    if (!msgsToForward || msgsToForward.length === 0) return;
+    if (!currentUser || !msgsToForward || msgsToForward.length === 0) return;
     const now = new Date();
     const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
     
@@ -1504,7 +1766,7 @@ export default function App() {
             senderId: msg.senderId,
             usersList,
             contacts,
-            currentUser,
+            currentUser: currentUser || undefined,
             chats,
             chatId: msg.chatId
           }
@@ -1556,6 +1818,25 @@ export default function App() {
     );
   };
 
+  // Mandatory Authentication Gateway:
+  // If user is not logged in (first visit, session cleared, or after logout),
+  // they MUST authenticate via Login or Register first! No access to main app or super admin panel without logging in!
+  if (!currentUser) {
+    return (
+      <div className="flex h-[100dvh] w-full items-center justify-center bg-[#0e1621] text-white overflow-hidden p-0 sm:p-4">
+        <AuthModal
+          isOpen={true}
+          onClose={() => {}}
+          onLoginSuccess={handleLoginSuccess}
+          currentUser={null}
+          usersList={usersList}
+          chats={chats}
+          isMandatory={true}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-[100dvh] max-h-[100dvh] w-full overflow-hidden bg-[#0e1621] text-white">
       {/* Sidebar (Chat list, folders, stories) */}
@@ -1590,6 +1871,7 @@ export default function App() {
           onOpenMiniApps={() => setIsMiniAppsDirectoryOpen(true)}
           onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
           onOpenAuth={() => setIsAuthOpen(true)}
+          onLogout={handleLogout}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
           activeFolder={activeFolder}
@@ -1608,7 +1890,7 @@ export default function App() {
               role: 'owner',
               roleTitle: '👑 مدیر و سازنده گروه (Owner)',
               isOnline: true,
-              bio: currentUser.bio || 'سازنده و مدیر گروه'
+              bio: currentUser.bio || ''
             };
             const chatWithOwner: Chat = {
               ...newChat,
@@ -1967,6 +2249,7 @@ export default function App() {
         chats={chats}
         onUpdateUser={handleUpdateUser}
         onOpenAuth={() => setIsAuthOpen(true)}
+        onLogout={handleLogout}
         onOpenAdminPanel={() => setIsAdminPanelOpen(true)}
         initialSection={settingsInitialSection}
         onSyncDatabase={handleSyncDatabase}

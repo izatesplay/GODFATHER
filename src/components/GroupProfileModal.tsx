@@ -48,6 +48,7 @@ interface GroupProfileModalProps {
   isBlocked?: boolean;
   onClearHistory?: (chatId: string) => void;
   onDeleteChat?: (chatId: string) => void;
+  usersList?: User[];
 }
 
 export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
@@ -64,7 +65,8 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
   onToggleBlockChat,
   isBlocked = false,
   onClearHistory,
-  onDeleteChat
+  onDeleteChat,
+  usersList
 }) => {
   const [copiedLink, setCopiedLink] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
@@ -136,7 +138,7 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
           role: isGroupOwner ? 'owner' : isGroupAdmin ? 'admin' : 'member',
           roleTitle: isGroupOwner ? '👑 مدیر و سازنده گروه (Owner)' : isGroupAdmin ? '🛡️ ادمین گروه' : '👤 عضو عادی',
           isOnline: true,
-          bio: currentUser.bio || 'سازنده و مدیر گروه'
+          bio: currentUser.bio || ''
         },
         ...existingMembers
       ];
@@ -391,15 +393,38 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
                       <span>{chat.membersCount || currentMembersList.length} عضو</span>
                     </span>
                     <span>•</span>
-                    <span className="text-emerald-400">
-                      {currentMembersList.filter((m) => m.isOnline).length} نفر آنلاین
+                    <span className="text-emerald-400 flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span>{currentMembersList.filter((m) => m.isOnline).length} نفر آنلاین</span>
                     </span>
                   </>
-                ) : (
-                  <span className={isBlocked ? 'text-slate-500' : 'text-emerald-400'}>
-                    {isBlocked ? 'آخرین بازدید خیلی وقت پیش' : 'هم‌اکنون آنلاین'}
-                  </span>
-                )}
+                ) : (() => {
+                  const partnerUser = (usersList || []).find(
+                    (u) =>
+                      u.id === chat.id ||
+                      (chat.username && u.username && u.username.toLowerCase() === chat.username.toLowerCase())
+                  );
+                  const isOnlineNow = partnerUser ? Boolean(partnerUser.isOnline) : false;
+                  const statusString = isOnlineNow ? 'آنلاین' : (partnerUser?.lastSeen || 'آخرین بازدید اخیراً');
+
+                  if (isBlocked) {
+                    return <span className="text-slate-500">آخرین بازدید خیلی وقت پیش</span>;
+                  }
+                  if (isOnlineNow) {
+                    return (
+                      <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/80 animate-pulse" />
+                        <span>آنلاین</span>
+                      </span>
+                    );
+                  }
+                  return (
+                    <span className="flex items-center gap-1.5 text-slate-400 font-medium">
+                      <span className="w-2 h-2 rounded-full bg-slate-600 opacity-60" title="خاموش (آفلاین)" />
+                      <span>{statusString}</span>
+                    </span>
+                  );
+                })()}
               </div>
 
               {/* Quick Action Buttons (Call, Video, Mute, Share) */}
@@ -632,6 +657,8 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
                   {filteredMembers.map((member) => {
                     const isMemberOwner = member.role === 'owner';
                     const isMemberAdmin = member.role === 'admin' || isMemberOwner;
+                    const matchedUser = (usersList || []).find((u) => u.id === member.id || (member.username && u.username && u.username.toLowerCase() === member.username.toLowerCase()));
+                    const isMemberOnline = matchedUser ? Boolean(matchedUser.isOnline) : Boolean(member.isOnline);
 
                     return (
                       <div
@@ -639,12 +666,28 @@ export const GroupProfileModal: React.FC<GroupProfileModalProps> = ({
                         className="flex items-center justify-between p-2 rounded-xl bg-slate-900/40 hover:bg-slate-900/80 transition-colors"
                       >
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-full overflow-hidden border border-slate-700 flex-shrink-0">
+                          <div className="relative w-8 h-8 rounded-full overflow-hidden border border-slate-700 flex-shrink-0">
                             <img src={member.avatar} alt={member.name} className="w-full h-full object-cover" />
+                            <div
+                              className={`absolute bottom-0 right-0 w-2 h-2 rounded-full border border-[#131c26] transition-all duration-300 ${
+                                isMemberOnline
+                                  ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.9)]'
+                                  : 'bg-slate-700 opacity-40'
+                              }`}
+                              title={isMemberOnline ? 'آنلاین' : 'خاموش (آفلاین)'}
+                            />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-1.5">
                               <span className="text-xs font-bold text-white truncate">{member.name}</span>
+                              <span
+                                className={`w-1.5 h-1.5 rounded-full flex-shrink-0 transition-all duration-300 ${
+                                  isMemberOnline
+                                    ? 'bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.9)]'
+                                    : 'bg-slate-700 opacity-40 border border-slate-600/50'
+                                }`}
+                                title={isMemberOnline ? 'آنلاین' : 'خاموش (آفلاین)'}
+                              />
                               {isMemberOwner ? (
                                 <span className="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-1.5 py-0.2 rounded-full">
                                   مالک

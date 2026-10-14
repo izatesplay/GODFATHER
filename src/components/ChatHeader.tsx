@@ -142,70 +142,122 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
           )}
 
           {/* Group / Channel / Contact Profile trigger: Clicking on photo or title shows members and bio */}
-          <button
-            onClick={() => setShowGroupProfile(true)}
-            className="flex items-center gap-2 sm:gap-3 min-w-0 text-right cursor-pointer group hover:opacity-90 transition-all text-inherit"
-            title="برای مشاهده بیو و اعضای گفتگو کلیک کنید"
-          >
-            <div className="relative flex-shrink-0">
-              <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden border border-slate-700 group-hover:ring-2 group-hover:ring-cyan-400 group-hover:scale-105 transition-all shadow-md bg-slate-800 flex items-center justify-center">
-                {isBlocked ? (
-                  <Lock className="w-5 h-5 text-slate-500" />
-                ) : (
-                  <img src={chat.avatar} alt={chat.title} className="w-full h-full object-cover" />
-                )}
-              </div>
-              {chat.type === 'secret' && !isBlocked && (
-                <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] shadow">
-                  <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+          {(() => {
+            const isSavedChat = chat.id === 'chat_saved';
+            const isChannelChat = chat.type === 'channel';
+            const isPrivateChat = chat.type === 'private' && !isSavedChat;
+            const partnerUser = isPrivateChat
+              ? (usersList || []).find(
+                  (u) =>
+                    u.id === chat.id ||
+                    u.phone === chat.id ||
+                    (chat.username && u.username && u.username.toLowerCase() === chat.username.toLowerCase()) ||
+                    (chat.members && chat.members.some((m) => m.id === u.id && u.id !== currentUser?.id))
+                )
+              : null;
+            const isOnlineNow = partnerUser ? Boolean(partnerUser.isOnline) : false;
+            const statusString = isOnlineNow ? 'آنلاین' : (partnerUser?.lastSeen || 'آخرین بازدید اخیراً');
+
+            return (
+              <button
+                onClick={() => setShowGroupProfile(true)}
+                className="flex items-center gap-2 sm:gap-3 min-w-0 text-right cursor-pointer group hover:opacity-90 transition-all text-inherit"
+                title="برای مشاهده بیو و اعضای گفتگو کلیک کنید"
+              >
+                <div className="relative flex-shrink-0">
+                  <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-full overflow-hidden border border-slate-700 group-hover:ring-2 group-hover:ring-cyan-400 group-hover:scale-105 transition-all shadow-md bg-slate-800 flex items-center justify-center">
+                    {isBlocked ? (
+                      <Lock className="w-5 h-5 text-slate-500" />
+                    ) : (
+                      <img src={chat.avatar} alt={chat.title} className="w-full h-full object-cover" />
+                    )}
+                  </div>
+                  {chat.type === 'secret' && !isBlocked && (
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[10px] shadow">
+                      <Lock className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    </div>
+                  )}
+                  {isPrivateChat && !isBlocked && (
+                    <div
+                      className={`absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full border-2 border-[#1e293b] transition-all duration-300 ${
+                        isOnlineNow
+                          ? 'bg-emerald-400 shadow-sm shadow-emerald-400/80 ring-1 ring-emerald-500/50'
+                          : 'bg-slate-600 opacity-60'
+                      }`}
+                      title={isOnlineNow ? 'آنلاین' : 'آفلاین (خاموش)'}
+                    />
+                  )}
+                  {isCallActive && !isBlocked && (
+                    <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#1e293b] animate-ping" />
+                  )}
                 </div>
-              )}
-              {chat.type === 'private' && !isBlocked && (
-                <div className="absolute bottom-0 right-0 w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-emerald-400 border-2 border-[#1e293b]" />
-              )}
-              {isCallActive && !isBlocked && (
-                <div className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-emerald-400 border-2 border-[#1e293b] animate-ping" />
-              )}
-            </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-1.5">
-                <h2 className="font-extrabold text-white text-xs sm:text-sm truncate group-hover:text-cyan-300 transition-colors">
-                  {chat.title}
-                </h2>
-                {isBlocked && (
-                  <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full font-bold">
-                    مسدود شده
-                  </span>
-                )}
-                {chat.boostLevel && chat.boostLevel > 0 && !isBlocked && (
-                  <span className="text-[10px] px-1.5 py-0.2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-mono flex items-center gap-0.5 flex-shrink-0">
-                    <Rocket className="w-2.5 h-2.5" />
-                    <span>Lvl {chat.boostLevel}</span>
-                  </span>
-                )}
-              </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <h2 className="font-extrabold text-white text-xs sm:text-sm truncate group-hover:text-cyan-300 transition-colors">
+                      {chat.title}
+                    </h2>
+                    {isBlocked && (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-rose-500/20 text-rose-300 border border-rose-500/40 rounded-full font-bold">
+                        مسدود شده
+                      </span>
+                    )}
+                    {chat.boostLevel && chat.boostLevel > 0 && !isBlocked && (
+                      <span className="text-[10px] px-1.5 py-0.2 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-full font-mono flex items-center gap-0.5 flex-shrink-0">
+                        <Rocket className="w-2.5 h-2.5" />
+                        <span>Lvl {chat.boostLevel}</span>
+                      </span>
+                    )}
+                  </div>
 
-              <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-400 truncate">
-                {isBlocked ? (
-                  <span className="text-slate-500">آخرین بازدید خیلی وقت پیش</span>
-                ) : chat.type === 'secret' ? (
-                  <span className="text-emerald-400 flex items-center gap-1 truncate">
-                    <Shield className="w-3 h-3 flex-shrink-0" />
-                    <span>E2EE • حذف: {chat.secretChatTimer || 10}ثانیه</span>
-                  </span>
-                ) : chat.membersCount ? (
-                  <span className="group-hover:text-cyan-300 transition-colors flex items-center gap-1">
-                    <span>{chat.membersCount.toLocaleString()} عضو</span>
-                    <span className="text-slate-500 hidden sm:inline">•</span>
-                    <span className="text-slate-400 hidden sm:inline">برای بیو و اعضا کلیک کنید</span>
-                  </span>
-                ) : (
-                  <span className="text-emerald-400">آنلاین</span>
-                )}
-              </div>
-            </div>
-          </button>
+                  <div className="flex items-center gap-2 text-[11px] sm:text-xs text-slate-400 truncate">
+                    {(() => {
+                      if (isBlocked) {
+                        return <span className="text-slate-500">آخرین بازدید خیلی وقت پیش</span>;
+                      }
+                      if (chat.type === 'secret') {
+                        return (
+                          <span className="text-emerald-400 flex items-center gap-1 truncate">
+                            <Shield className="w-3 h-3 flex-shrink-0" />
+                            <span>E2EE • حذف: {chat.secretChatTimer || 10}ثانیه</span>
+                          </span>
+                        );
+                      }
+                      if (isSavedChat) {
+                        return <span className="text-slate-400">فضای ابری اختصاصی شما</span>;
+                      }
+                      if (isChannelChat) {
+                        return <span className="text-slate-400">{chat.membersCount ? `${chat.membersCount.toLocaleString()} مشترک` : 'کانال رسمی'}</span>;
+                      }
+                      if (chat.membersCount && chat.type !== 'private') {
+                        return (
+                          <span className="group-hover:text-cyan-300 transition-colors flex items-center gap-1">
+                            <span>{chat.membersCount.toLocaleString()} عضو</span>
+                            <span className="text-slate-500 hidden sm:inline">•</span>
+                            <span className="text-slate-400 hidden sm:inline">برای بیو و اعضا کلیک کنید</span>
+                          </span>
+                        );
+                      }
+                      if (isOnlineNow) {
+                        return (
+                          <span className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.9)] ring-2 ring-emerald-500/40 animate-pulse inline-block" title="آنلاین" />
+                            <span>آنلاین</span>
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="flex items-center gap-1.5 text-slate-400 font-medium">
+                          <span className="w-2.5 h-2.5 rounded-full bg-slate-700 border border-slate-600/60 inline-block opacity-40 shadow-inner" title="خاموش (آفلاین)" />
+                          <span>{statusString}</span>
+                        </span>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </button>
+            );
+          })()}
 
           {/* Supergroup Topic indicator button */}
           {chat.topics && (
@@ -653,6 +705,7 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({
         isBlocked={isBlocked}
         onClearHistory={onClearHistory}
         onDeleteChat={onDeleteChat}
+        usersList={usersList}
       />
 
       {/* Add Members / Channel Join Modal */}

@@ -17,6 +17,7 @@ export interface User {
   starsBalance?: number;
   isBanned?: boolean;
   blockedUserIds?: string[]; // List of user IDs blocked by this user
+  password?: string;
 }
 
 export interface Topic {

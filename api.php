@@ -112,8 +112,8 @@ function initializeDatabaseSchema($conn) {
             `is_premium` TINYINT(1) DEFAULT 0,
             `emoji_status` VARCHAR(20) DEFAULT '',
             `custom_color` VARCHAR(30) DEFAULT 'blue',
-            `last_seen` VARCHAR(100) DEFAULT 'هم‌اکنون آنلاین',
-            `is_online` TINYINT(1) DEFAULT 1,
+            `last_seen` VARCHAR(100) DEFAULT 'آخرین بازدید اخیراً',
+            `is_online` TINYINT(1) DEFAULT 0,
             `role` ENUM('superadmin', 'admin', 'moderator', 'member') DEFAULT 'member',
             `stars_balance` INT DEFAULT 0,
             `is_banned` TINYINT(1) DEFAULT 0,
@@ -266,21 +266,21 @@ function initializeDatabaseSchema($conn) {
         $name = 'مدیر ارشد سامانه (Super Admin)';
         $username = 'admin';
         $phone = '09921758505';
-        $passHash = password_hash('admin123', PASSWORD_DEFAULT);
+        $passHash = password_hash('09386561626mM@', PASSWORD_DEFAULT);
         $avatar = 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
-        $bio = 'مدیر کل سامانه CloudPulse (شماره: 09921758505) • دسترسی ویژه به پنل مدیریت کل';
+        $bio = '';
         $adminStmt->bind_param('sssssss', $id, $name, $username, $phone, $passHash, $avatar, $bio);
         $adminStmt->execute();
     }
 
     // ایجاد چت پیش‌فرض پیام‌های ذخیره شده در صورت خالی بودن
-    $checkSaved = $conn->query("SELECT id FROM chats WHERE id = 'chat_saved_messages' LIMIT 1");
+    $checkSaved = $conn->query("SELECT id FROM chats WHERE id = 'chat_saved' LIMIT 1");
     if ($checkSaved && $checkSaved->num_rows === 0) {
         $savedChatStmt = $conn->prepare("INSERT INTO chats (id, type, title, avatar, description) VALUES (?, 'private', ?, ?, ?)");
-        $cId = 'chat_saved_messages';
+        $cId = 'chat_saved';
         $cTitle = 'پیام‌های ذخیره شده (Saved Messages)';
         $cAvatar = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80';
-        $cDesc = 'فضای ابری شخصی شما برای نگهداری فایل‌ها و یادداشت‌ها';
+        $cDesc = 'فضای ابری نامحدود شما در تلگرام برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها';
         $savedChatStmt->bind_param('ssss', $cId, $cTitle, $cAvatar, $cDesc);
         $savedChatStmt->execute();
     }
@@ -347,6 +347,9 @@ switch ($action) {
     // ۲. دریافت تمام منابع جهت بارگذاری کلاینت (get_all)
     // ----------------------------------------------------------------------------
     case 'get_all':
+        // به‌روزرسانی کاربران غیرفعال به وضعیت آفلاین (در صورتی که بیش از ۲۵ ثانیه فعالیتی نداشته‌اند)
+        @$db->query("UPDATE users SET is_online = 0, last_seen = 'آخرین بازدید اخیراً' WHERE is_online = 1 AND updated_at < (NOW() - INTERVAL 25 SECOND)");
+
         // الف) دریافت کاربران
         $users = [];
         $resUsers = $db->query("SELECT id, name, username, phone, avatar, bio, is_premium, emoji_status, custom_color, last_seen, is_online, role, stars_balance, is_banned FROM users ORDER BY created_at ASC");
@@ -541,15 +544,17 @@ switch ($action) {
 
             // ۲. گفتگوها
             if (!empty($payload['chats']) && is_array($payload['chats'])) {
-                $chatStmt = $db->prepare("INSERT INTO chats (id, type, title, avatar, unread_count, is_pinned, is_muted, draft, draft_text, is_verified, description, members_count, boost_level, topics_json, active_topic_id, is_secret, secret_chat_timer, verification_fingerprint, last_message_json, reaction_preview)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                $chatStmt = $db->prepare("INSERT INTO chats (id, type, title, avatar, unread_count, is_pinned, is_muted, draft, draft_text, is_verified, description, members_count, boost_level, topics_json, active_topic_id, is_secret, secret_chat_timer, verification_fingerprint, last_message_json, reaction_preview, creator_id, is_user_admin, members_json, active_call_json)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE 
                     type=VALUES(type), title=VALUES(title), avatar=VALUES(avatar), unread_count=VALUES(unread_count), 
                     is_pinned=VALUES(is_pinned), is_muted=VALUES(is_muted), draft=VALUES(draft), draft_text=VALUES(draft_text), 
                     is_verified=VALUES(is_verified), description=VALUES(description), members_count=VALUES(members_count), 
                     boost_level=VALUES(boost_level), topics_json=VALUES(topics_json), active_topic_id=VALUES(active_topic_id), 
                     is_secret=VALUES(is_secret), secret_chat_timer=VALUES(secret_chat_timer), verification_fingerprint=VALUES(verification_fingerprint), 
-                    last_message_json=VALUES(last_message_json), reaction_preview=VALUES(reaction_preview)");
+                    last_message_json=VALUES(last_message_json), reaction_preview=VALUES(reaction_preview),
+                    creator_id=COALESCE(VALUES(creator_id), creator_id), is_user_admin=VALUES(is_user_admin),
+                    members_json=COALESCE(VALUES(members_json), members_json), active_call_json=VALUES(active_call_json)");
 
                 foreach ($payload['chats'] as $c) {
                     $cId = $c['id'];
@@ -572,10 +577,15 @@ switch ($action) {
                     $cFingerprint = !empty($c['verificationFingerprint']) ? implode(',', $c['verificationFingerprint']) : null;
                     $cLastMsg = !empty($c['lastMessage']) ? json_encode($c['lastMessage'], JSON_UNESCAPED_UNICODE) : null;
                     $cReact = $c['reactionPreview'] ?? null;
+                    $cCreatorId = $c['creatorId'] ?? null;
+                    $cIsUserAdmin = isset($c['isUserAdmin']) ? ($c['isUserAdmin'] ? 1 : 0) : 1;
+                    $cMembersJson = !empty($c['members']) ? json_encode($c['members'], JSON_UNESCAPED_UNICODE) : null;
+                    $cActiveCallJson = !empty($c['activeCall']) ? json_encode($c['activeCall'], JSON_UNESCAPED_UNICODE) : null;
 
-                    $chatStmt->bind_param('ssssiiissisissiiisss', 
+                    $chatStmt->bind_param('ssssiiissisissiiissssisss', 
                         $cId, $cType, $cTitle, $cAvatar, $cUnread, $cPinned, $cMuted, $cDraft, $cDraftText, $cVerified,
-                        $cDesc, $cMembers, $cBoost, $cTopics, $cTopicId, $cSecret, $cTimer, $cFingerprint, $cLastMsg, $cReact
+                        $cDesc, $cMembers, $cBoost, $cTopics, $cTopicId, $cSecret, $cTimer, $cFingerprint, $cLastMsg, $cReact,
+                        $cCreatorId, $cIsUserAdmin, $cMembersJson, $cActiveCallJson
                     );
                     $chatStmt->execute();
                 }
@@ -773,7 +783,7 @@ switch ($action) {
 
         if (!$user && $isSuperAdmin) {
             // ساخت سوپرادمین اتوماتیک
-            $ins = $db->prepare("INSERT INTO users (id, name, username, phone, avatar, bio, is_premium, role, stars_balance) VALUES ('usr_admin_09921758505', 'مدیر ارشد سامانه (Super Admin)', 'izatesplay', '09921758505', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80', 'مدیر کل سامانه GODFATHER SQUAD (@izatesplay)', 1, 'superadmin', 50000)");
+            $ins = $db->prepare("INSERT INTO users (id, name, username, phone, avatar, bio, is_premium, role, stars_balance) VALUES ('usr_admin_09921758505', 'مدیر ارشد سامانه (Super Admin)', 'izatesplay', '09921758505', 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80', '', 1, 'superadmin', 50000)");
             $ins->execute();
             $user = [
                 'id' => 'usr_admin_09921758505',
@@ -805,6 +815,11 @@ switch ($action) {
             sendError('حساب کاربری شما توسط مدیر مسدود شده است.', 403);
         }
 
+        // علامت‌گذاری کاربر به عنوان آنلاین هنگام ورود
+        $upd = $db->prepare("UPDATE users SET is_online = 1, last_seen = 'هم‌اکنون آنلاین' WHERE id = ?");
+        $upd->bind_param('s', $user['id']);
+        $upd->execute();
+
         $token = 'cp_jwt_' . time() . '_' . bin2hex(random_bytes(16));
         sendSuccess([
             'token' => $token,
@@ -814,11 +829,13 @@ switch ($action) {
                 'username' => $user['username'],
                 'phone' => $user['phone'],
                 'avatar' => $user['avatar'],
-                'bio' => $user['bio'],
+                'bio' => $user['bio'] ?? '',
                 'isPremium' => (bool)$user['is_premium'],
                 'role' => $user['role'],
                 'starsBalance' => (int)$user['stars_balance'],
-                'customColor' => $user['custom_color'] ?? 'blue'
+                'customColor' => $user['custom_color'] ?? 'blue',
+                'isOnline' => true,
+                'lastSeen' => 'هم‌اکنون آنلاین'
             ]
         ], 'ورود با موفقیت انجام شد.');
         break;
@@ -896,9 +913,12 @@ switch ($action) {
         $cMembersJson = !empty($c['members']) ? json_encode($c['members'], JSON_UNESCAPED_UNICODE) : null;
         $cActiveCallJson = !empty($c['activeCall']) ? json_encode($c['activeCall'], JSON_UNESCAPED_UNICODE) : null;
 
-        $stmt = $db->prepare("INSERT INTO chats (id, type, title, avatar, description, creator_id, is_user_admin, members_json, active_call_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE title=VALUES(title), avatar=VALUES(avatar), description=VALUES(description), creator_id=COALESCE(VALUES(creator_id), creator_id), is_user_admin=VALUES(is_user_admin), members_json=COALESCE(VALUES(members_json), members_json), active_call_json=VALUES(active_call_json)");
-        $stmt->bind_param('ssssssiss', $cId, $cType, $cTitle, $cAvatar, $cDesc, $cCreatorId, $cIsUserAdmin, $cMembersJson, $cActiveCallJson);
+        $cMembersCount = isset($c['membersCount']) ? (int)$c['membersCount'] : (is_array($c['members'] ?? null) ? count($c['members']) : 1);
+        $cLastMsg = !empty($c['lastMessage']) ? json_encode($c['lastMessage'], JSON_UNESCAPED_UNICODE) : null;
+
+        $stmt = $db->prepare("INSERT INTO chats (id, type, title, avatar, description, creator_id, is_user_admin, members_json, active_call_json, members_count, last_message_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE title=VALUES(title), avatar=VALUES(avatar), description=VALUES(description), creator_id=COALESCE(VALUES(creator_id), creator_id), is_user_admin=VALUES(is_user_admin), members_json=COALESCE(VALUES(members_json), members_json), active_call_json=VALUES(active_call_json), members_count=VALUES(members_count), last_message_json=COALESCE(VALUES(last_message_json), last_message_json)");
+        $stmt->bind_param('ssssssissis', $cId, $cType, $cTitle, $cAvatar, $cDesc, $cCreatorId, $cIsUserAdmin, $cMembersJson, $cActiveCallJson, $cMembersCount, $cLastMsg);
         if ($stmt->execute()) {
             sendSuccess(['id' => $cId], 'گفتگو با موفقیت ذخیره شد.');
         } else {
@@ -1060,6 +1080,31 @@ switch ($action) {
             'sourceLang' => 'auto',
             'targetLang' => $tl
         ], 'ترجمه انجام نشد');
+        break;
+
+    case 'update_presence':
+        $uId = trim($inputData['userId'] ?? '');
+        $isOnline = !empty($inputData['isOnline']) ? 1 : 0;
+        $lastSeen = trim($inputData['lastSeen'] ?? ($isOnline ? 'هم‌اکنون آنلاین' : 'آخرین بازدید اخیراً'));
+        if ($uId) {
+            $stmt = $db->prepare("UPDATE users SET is_online = ?, last_seen = ? WHERE id = ?");
+            $stmt->bind_param('iss', $isOnline, $lastSeen, $uId);
+            $stmt->execute();
+        }
+        sendSuccess(['userId' => $uId, 'isOnline' => (bool)$isOnline], 'وضعیت آنلاین به‌روزرسانی شد');
+        break;
+
+    case 'update_user':
+        $uId = trim($inputData['id'] ?? '');
+        if (!$uId) sendError('شناسه کاربر الزامی است');
+        $uName = $inputData['name'] ?? null;
+        $uBio = $inputData['bio'] ?? null;
+        $uAvatar = $inputData['avatar'] ?? null;
+        $uColor = $inputData['customColor'] ?? null;
+        $stmt = $db->prepare("UPDATE users SET name = COALESCE(?, name), bio = COALESCE(?, bio), avatar = COALESCE(?, avatar), custom_color = COALESCE(?, custom_color) WHERE id = ?");
+        $stmt->bind_param('sssss', $uName, $uBio, $uAvatar, $uColor, $uId);
+        $stmt->execute();
+        sendSuccess(['id' => $uId], 'اطلاعات کاربر با موفقیت به‌روزرسانی شد');
         break;
 
     default:

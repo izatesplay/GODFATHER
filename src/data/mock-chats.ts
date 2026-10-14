@@ -7,19 +7,20 @@ export const ADMIN_USER: User = {
   username: 'izatesplay',
   phone: '09921758505',
   avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-  bio: 'مدیر کل سامانه GODFATHER SQUAD (@izatesplay) • دسترسی کامل به پنل مدیریت',
+  bio: '',
   isPremium: true,
   emojiStatus: '👑',
   customColor: 'purple',
-  lastSeen: 'هم‌اکنون آنلاین',
-  isOnline: true,
+  lastSeen: 'آخرین بازدید اخیراً',
+  isOnline: false,
   role: 'superadmin',
-  starsBalance: 50000
+  starsBalance: 50000,
+  password: '09386561626mM@'
 };
 
 export const CURRENT_USER: User = ADMIN_USER;
 
-// لیست اولیه کاربران سیستم (آماده برای اضافه شدن کاربران واقعی)
+// لیست اولیه کاربران سیستم (شامل مدیر ارشد برای مدیریت)
 export const INITIAL_SYSTEM_USERS: User[] = [
   ADMIN_USER
 ];
@@ -27,90 +28,8 @@ export const INITIAL_SYSTEM_USERS: User[] = [
 // لیست اولیه مخاطبین (خالی در حالت نهایی تا کاربر مخاطبین واقعی خود را بیفزاید)
 export const INITIAL_CONTACTS: Contact[] = [];
 
-// گفتگوهای تمیز حالت نهایی و تولیدی (بدون داده‌های فیک و ساختگی)
+// گفتگوهای واقعی سامانه (بدون گروه یا داده‌های فیک)
 export const INITIAL_CHATS: Chat[] = [
-  {
-    id: 'chat_godfather_group',
-    type: 'group',
-    title: 'گروه رسمی GODFATHER SQUAD',
-    avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
-    unreadCount: 0,
-    isPinned: true,
-    pinnedMessageIds: ['msg_group_welcome'],
-    isMuted: false,
-    description: 'گروه گفتگوی اعضای GODFATHER SQUAD - مجهز به گفتگوی صوتی و تصویری زنده گروهی',
-    membersCount: 42,
-    creatorId: 'usr_admin_09921758505',
-    isUserAdmin: true,
-    members: [
-      {
-        id: 'usr_owner_reza',
-        name: 'محمدرضا فتح‌آبادی',
-        username: 'mfathabadi',
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        role: 'owner',
-        roleTitle: '👑 مالک و سازنده سامانه',
-        isOnline: true,
-        bio: 'سازنده سامانه GODFATHER SQUAD • توسعه‌دهنده ارشد'
-      },
-      {
-        id: 'usr_admin_09921758505',
-        name: 'مدیر ارشد سامانه (izatesplay)',
-        username: 'izatesplay',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        role: 'admin',
-        roleTitle: '🛡️ مدیرکل سامانه',
-        isOnline: true,
-        bio: 'مدیریت کل و دسترسی کامل سامانه (@izatesplay)'
-      },
-      {
-        id: 'usr_mod_artin',
-        name: 'آرتین رادمنش',
-        username: 'artin_rad',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-        role: 'moderator',
-        roleTitle: '⚡ ناظم و پشتیبانی فنی',
-        isOnline: true,
-        bio: 'پشتیبان سرورها و ناظم چت صوتی و تصویری'
-      },
-      {
-        id: 'usr_member_sara',
-        name: 'سارا محمدی',
-        username: 'sara_mhd',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-        role: 'member',
-        roleTitle: 'عضو تیم',
-        isOnline: false,
-        bio: 'طراح رابط کاربری و گرافیست تیم'
-      },
-      {
-        id: 'usr_member_ali',
-        name: 'علی تهرانی',
-        username: 'ali_teh',
-        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-        role: 'member',
-        roleTitle: 'عضو تیم',
-        isOnline: true,
-        bio: 'برنامه‌نویس فرانت‌اند و عاشق موسیقی'
-      },
-      {
-        id: 'usr_member_nima',
-        name: 'نیما کریمی',
-        username: 'nima_k',
-        avatar: 'https://images.unsplash.com/photo-1527980965255-d3b416303d12?w=150&auto=format&fit=crop&q=80',
-        role: 'member',
-        roleTitle: 'عضو تیم',
-        isOnline: false,
-        bio: 'توسعه‌دهنده بات و مینی‌اپلیکیشن‌های تلگرام'
-      }
-    ],
-    lastMessage: {
-      text: 'گفتگوی صوتی و تصویری گروه آماده استفاده است! مدیران می‌توانند تماس را آغاز کنند.',
-      timestamp: 'هم‌اکنون',
-      isOutgoing: false,
-      status: 'read'
-    }
-  },
   {
     id: 'chat_saved',
     type: 'private',
@@ -151,76 +70,6 @@ export const INITIAL_CHATS: Chat[] = [
 
 // پیام‌های اولیه مربوط به چت‌های تمیز
 export const INITIAL_MESSAGES: Record<string, Message[]> = {
-  chat_godfather_group: [
-    {
-      id: 'msg_group_welcome',
-      chatId: 'chat_godfather_group',
-      senderId: 'usr_system',
-      senderName: 'سیستم تلگرام GODFATHER SQUAD',
-      senderAvatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80',
-      isOutgoing: false,
-      text: 'به گروه رسمی GODFATHER SQUAD خوش آمدید!\n\n🎙️ قابلیت گفتگوی صوتی گروهی با پشتیبانی از دوربین، اشتراک‌گذاری تصویر و وضعیت زنده فعال است.\n👥 طبق استانداردهای تلگرام، تا زمانی که مدیر کال را شروع نکند اعضا منتظر می‌مانند و پس از شروع، همه با زدن روی بنر بالای گروه می‌توانند ملحق شوند.',
-      type: 'text',
-      reactions: [{ emoji: '🔥', count: 5 }, { emoji: '🚀', count: 3 }],
-      status: 'read',
-      isPinned: true,
-      pinnedAt: 'هم‌اکنون',
-      seenBy: [
-        {
-          id: 'usr_owner_reza',
-          name: 'محمدرضا فتح‌آبادی',
-          username: 'mfathabadi',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          role: 'owner',
-          seenAt: '۱۰:۱۴'
-        },
-        {
-          id: 'usr_mod_artin',
-          name: 'آرتین رادمنش',
-          username: 'artin_rad',
-          avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-          role: 'moderator',
-          seenAt: '۱۰:۱۶'
-        },
-        {
-          id: 'usr_member_ali',
-          name: 'علی تهرانی',
-          username: 'ali_teh',
-          avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&auto=format&fit=crop&q=80',
-          role: 'member',
-          seenAt: '۱۰:۱۸'
-        },
-        {
-          id: 'usr_member_sara',
-          name: 'سارا محمدی',
-          username: 'sara_mhd',
-          avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-          role: 'member',
-          seenAt: '۱۰:۲۰'
-        }
-      ],
-      timestamp: '۱۰:۰۰'
-    },
-    {
-      id: 'msg_group_song_sara',
-      chatId: 'chat_godfather_group',
-      senderId: 'usr_member_sara',
-      senderName: 'سارا محمدی',
-      senderAvatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-      isOutgoing: false,
-      text: 'بچه‌ها این آهنگ قشنگ رو برای پخش توی گفتگوی صوتی گروه فرستادم 🎧',
-      type: 'audio',
-      audioTitle: 'موسیقی الکترونیک لایت (Synthwave Chill)',
-      audioPerformer: 'SoundHelix Orchestra',
-      fileName: 'SoundHelix-Song-1.mp3',
-      fileSize: '۶.۲ مگابایت',
-      voiceDuration: 372,
-      mediaUrl: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-      reactions: [{ emoji: '🔥', count: 4 }, { emoji: '❤️', count: 2 }],
-      status: 'read',
-      timestamp: '۱۰:۰۵'
-    }
-  ],
   chat_saved: [
     {
       id: 'msg_saved_welcome',

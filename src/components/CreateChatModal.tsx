@@ -177,7 +177,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       role: 'owner',
       roleTitle: '👑 مدیر و سازنده گروه (Owner)',
       isOnline: true,
-      bio: currentUser.bio || 'سازنده و مدیر گروه'
+      bio: currentUser.bio || ''
     };
 
     const initialMembersList: ChatMember[] = [

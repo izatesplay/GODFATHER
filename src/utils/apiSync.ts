@@ -445,4 +445,91 @@ export async function registerUserOnRemote(userData: {
   }
 }
 
+/**
+ * ورود کاربر از طریق پایگاه داده سرور (MySQL / Express)
+ */
+export async function loginUserOnRemote(
+  identifier: string,
+  password: string
+): Promise<{ success: boolean; user?: User; token?: string; error?: string }> {
+  const url = getApiBaseUrl().replace(/\/$/, '');
+  try {
+    const res = await fetch(`${url}?action=login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ identifier, password })
+    });
+
+    const json = await res.json();
+    if (json.status === 'success' && json.data?.user) {
+      return { success: true, user: json.data.user, token: json.data.token };
+    }
+    return { success: false, error: json.message || json.error || 'اطلاعات کاربری یا کلمه عبور نادرست است.' };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'عدم دسترسی به سرور دیتابیس' };
+  }
+}
+
+/**
+ * به‌روزرسانی بلادرنگ وضعیت حضور (آنلاین / آفلاین) در پایگاه‌داده
+ */
+export async function updateUserPresenceOnRemote(
+  userId: string,
+  isOnline: boolean,
+  lastSeen?: string
+): Promise<boolean> {
+  const url = getApiBaseUrl().replace(/\/$/, '');
+  const payloadStr = JSON.stringify({ userId, isOnline, lastSeen });
+
+  // Use sendBeacon on page unload/hide for guaranteed delivery
+  if (typeof navigator !== 'undefined' && navigator.sendBeacon && !isOnline) {
+    try {
+      const blob = new Blob([payloadStr], { type: 'application/json' });
+      navigator.sendBeacon(`${url}?action=update_presence`, blob);
+      return true;
+    } catch {}
+  }
+
+  try {
+    const res = await fetch(`${url}?action=update_presence`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      keepalive: true,
+      body: payloadStr
+    });
+    const json = await res.json();
+    return json.status === 'success';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * حذف گفتگو از دیتابیس سرور
+ */
+export async function deleteChatOnRemote(chatId: string): Promise<boolean> {
+  const url = getApiBaseUrl().replace(/\/$/, '');
+  try {
+    const res = await fetch(`${url}?action=delete_chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({ chatId })
+    });
+    const json = await res.json();
+    return json.status === 'success';
+  } catch {
+    return false;
+  }
+}
+
+
 

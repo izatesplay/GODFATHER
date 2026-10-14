@@ -43,6 +43,7 @@ import {
   Share2,
   UserCheck,
   LogOut,
+  LogIn,
   Database,
   Download,
   RefreshCw,
@@ -73,6 +74,7 @@ interface SettingsModalProps {
   usersList?: User[];
   chats?: Chat[];
   onOpenAuth?: () => void;
+  onLogout?: () => void;
   onOpenAdminPanel?: () => void;
   initialSection?: SettingsSection;
   onSyncDatabase?: () => Promise<{ success: boolean; message?: string; error?: string }>;
@@ -118,6 +120,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   usersList = [],
   chats = [],
   onOpenAuth,
+  onLogout,
   onOpenAdminPanel,
   initialSection = 'main',
   onSyncDatabase,
@@ -743,28 +746,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 })}
 
                 {/* Account Switch & Logout */}
+                {onLogout && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onLogout();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-500/15 transition-all text-right cursor-pointer group border border-rose-500/30 mt-2 bg-rose-500/5"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center flex-shrink-0">
+                        <LogOut className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <div className="font-bold text-rose-400 text-xs sm:text-sm">
+                          خروج از حساب کاربری
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          خروج از نشست فعلی و بستن دسترسی به برنامه
+                        </div>
+                      </div>
+                    </div>
+                    <ChevronLeft className="w-4 h-4 text-slate-500 group-hover:text-rose-400 transition-colors" />
+                  </button>
+                )}
+
                 {onOpenAuth && (
                   <button
                     onClick={() => {
                       onClose();
                       onOpenAuth();
                     }}
-                    className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-rose-500/10 transition-all text-right cursor-pointer group border border-slate-800/80 mt-2"
+                    className="w-full flex items-center justify-between p-3 rounded-2xl hover:bg-cyan-500/10 transition-all text-right cursor-pointer group border border-slate-800/80 mt-2"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center flex-shrink-0">
-                        <LogOut className="w-5 h-5" />
+                      <div className="w-9 h-9 rounded-xl bg-cyan-500/15 text-cyan-400 flex items-center justify-center flex-shrink-0">
+                        <LogIn className="w-5 h-5" />
                       </div>
                       <div>
-                        <div className="font-bold text-rose-400 text-xs sm:text-sm">
-                          خروج / ورود با حساب کاربری دیگر
+                        <div className="font-bold text-cyan-400 text-xs sm:text-sm">
+                          ورود با حساب دیگر یا ثبت‌نام
                         </div>
                         <div className="text-[11px] text-slate-400">
-                          ورود با نام کاربری دیگر یا ثبت‌نام حساب جدید
+                          تعویض حساب به کاربری دیگر
                         </div>
                       </div>
                     </div>
-                    <ChevronLeft className="w-4 h-4 text-slate-500 group-hover:text-rose-400 transition-colors" />
+                    <ChevronLeft className="w-4 h-4 text-slate-500 group-hover:text-cyan-400 transition-colors" />
                   </button>
                 )}
               </div>

@@ -19,7 +19,8 @@ import {
   checkLocalUsernameAvailable, 
   checkUsernameAvailability, 
   validateUsernameFormat,
-  registerUserOnRemote
+  registerUserOnRemote,
+  loginUserOnRemote
 } from '../utils/apiSync';
 import { getUserProfileLink, getDisplayDomain } from '../utils/linkHelper';
 
@@ -30,6 +31,7 @@ interface AuthModalProps {
   currentUser: User | null;
   usersList?: User[];
   chats?: Chat[];
+  isMandatory?: boolean;
 }
 
 export const AuthModal: React.FC<AuthModalProps> = ({
@@ -38,7 +40,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
   onLoginSuccess,
   currentUser,
   usersList = [],
-  chats = []
+  chats = [],
+  isMandatory = false
 }) => {
   const [mode, setMode] = useState<'login' | 'register'>('login');
   
@@ -111,7 +114,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -121,55 +124,77 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       return;
     }
 
-    // Check if logging in as Super Admin with secure password verification
+    setIsSubmitting(true);
+
+    // ۱. استعلام و احراز هویت مستقیم با دیتابیس سرور (MySQL / Express)
+    const remoteRes = await loginUserOnRemote(cleanId, loginPassword);
+    setIsSubmitting(false);
+
+    if (remoteRes.success && remoteRes.user) {
+      const loggedInUser: User = remoteRes.user;
+      setSuccessMsg(`خوش آمدید ${loggedInUser.name}! ورود با موفقیت انجام شد.`);
+      setTimeout(() => {
+        onLoginSuccess({
+          ...loggedInUser,
+          isOnline: true,
+          lastSeen: 'هم‌اکنون آنلاین'
+        });
+        if (!isMandatory) onClose();
+      }, 500);
+      return;
+    }
+
+    // اگر خطا از سمت سرور صادر شد (مانند کلمه عبور اشتباه یا مسدودی)
+    if (remoteRes.error && (remoteRes.error.includes('نادرست') || remoteRes.error.includes('مسدود'))) {
+      setError(remoteRes.error);
+      return;
+    }
+
+    // ۲. بررسی حالت اضطراری آفلاین برای مدیر ارشد
     if (cleanId === '09921758505' || cleanId.toLowerCase() === 'izatesplay' || cleanId.toLowerCase() === 'admin') {
       if (loginPassword !== '09386561626mM@' && loginPassword !== 'admin123') {
-        setError('کلمه عبور وارد شده برای این حساب کاربری نادرست است.');
+        setError('کلمه عبور وارد شده برای مدیر ارشد نادرست است.');
         return;
       }
       setSuccessMsg('خوش آمدید! ورود با دسترسی مدیریت ارشد انجام شد.');
       setTimeout(() => {
-        onLoginSuccess(ADMIN_USER);
-        onClose();
-      }, 700);
+        onLoginSuccess({
+          ...ADMIN_USER,
+          isOnline: true,
+          lastSeen: 'هم‌اکنون آنلاین'
+        });
+        if (!isMandatory) onClose();
+      }, 500);
       return;
     }
 
-    // Check existing users from usersList
-    const matchedUser = usersList.find(
+    // ۳. بررسی کاربران موجود در حافظه کلاینت
+    const matchedUser = (usersList || []).find(
       (u) => (u.username && u.username.toLowerCase() === cleanId.toLowerCase().replace(/^@+/, '')) || u.phone === cleanId
     );
 
     if (matchedUser) {
+      if (matchedUser.password && matchedUser.password !== loginPassword) {
+        setError('کلمه عبور وارد شده برای این حساب کاربری نادرست است.');
+        return;
+      }
+      if (matchedUser.isBanned) {
+        setError('این حساب کاربری توسط مدیریت ارشد مسدود شده است.');
+        return;
+      }
       setSuccessMsg(`خوش آمدید ${matchedUser.name}! ورود با موفقیت انجام شد.`);
       setTimeout(() => {
-        onLoginSuccess(matchedUser);
-        onClose();
-      }, 700);
+        onLoginSuccess({
+          ...matchedUser,
+          isOnline: true,
+          lastSeen: 'هم‌اکنون آنلاین'
+        });
+        if (!isMandatory) onClose();
+      }, 500);
       return;
     }
 
-    // Standard user login fallback
-    const user: User = {
-      id: `usr_${Date.now()}`,
-      name: cleanId === 'cloudpulse_master' ? 'علی مهندسی' : cleanId,
-      username: cleanId.replace(/^@+/, '').toLowerCase(),
-      phone: cleanId.startsWith('09') ? cleanId : '+98 912 345 6789',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-      bio: 'کاربر فعال در اکوسیستم GODFATHER SQUAD',
-      isPremium: false,
-      customColor: 'blue',
-      lastSeen: 'آنلاین',
-      isOnline: true,
-      role: 'member',
-      starsBalance: 100
-    };
-
-    setSuccessMsg('ورود با موفقیت انجام شد!');
-    setTimeout(() => {
-      onLoginSuccess(user);
-      onClose();
-    }, 700);
+    setError(remoteRes.error || 'کاربری با این مشخصات در پایگاه‌داده یافت نشد یا کلمه عبور نادرست است. لطفاً از تب «ثبت‌نام جدید» اقدام به ساخت حساب کنید.');
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -216,14 +241,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setIsSubmitting(true);
 
-    // ثبت در سرور MySQL / Express
+    // ثبت در سرور MySQL / Express در صورت اتصال
     const remoteReg = await registerUserOnRemote({
       name: regName.trim(),
       username: cleanUsername,
       phone: cleanPhone,
       password: regPassword,
       avatar: regAvatar,
-      bio: isSuperAdmin ? 'مدیر ارشد سامانه' : 'کاربر جدید تلگرام'
+      bio: ''
     });
 
     setIsSubmitting(false);
@@ -238,14 +263,13 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       name: regName.trim(),
       username: cleanUsername,
       phone: cleanPhone,
+      password: regPassword,
       avatar: regAvatar,
-      bio: isSuperAdmin 
-        ? 'مدیر ارشد سامانه' 
-        : 'کاربر جدید تلگرام',
+      bio: '',
       isPremium: isSuperAdmin,
       emojiStatus: isSuperAdmin ? '👑' : undefined,
       customColor: isSuperAdmin ? 'purple' : 'cyan',
-      lastSeen: 'آنلاین',
+      lastSeen: 'هم‌اکنون آنلاین',
       isOnline: true,
       role: isSuperAdmin ? 'superadmin' : 'member',
       starsBalance: isSuperAdmin ? 50000 : 100
@@ -255,7 +279,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
     setTimeout(() => {
       onLoginSuccess(newUser);
-      onClose();
+      if (!isMandatory) onClose();
     }, 800);
   };
 
@@ -273,12 +297,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
       <div className="bg-[#18222d] border-0 sm:border border-slate-700/80 rounded-none sm:rounded-3xl w-full sm:max-w-md h-full sm:h-auto sm:max-h-[92vh] shadow-2xl overflow-hidden flex flex-col">
         {/* Header */}
         <div className="p-5 sm:p-6 text-center border-b border-slate-700/60 bg-gradient-to-b from-[#101822] to-[#18222d] relative flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="absolute top-4 left-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {!isMandatory && currentUser && (
+            <button
+              onClick={onClose}
+              className="absolute top-4 left-4 p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
 
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white mx-auto shadow-lg shadow-cyan-500/25 mb-2.5">
             <ShieldCheck className="w-8 h-8" />
