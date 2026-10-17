@@ -3,7 +3,7 @@ import { ChatWallpaper } from '../types/telegram';
 export const SOLID_WALLPAPERS: ChatWallpaper[] = [
   {
     id: 'solid_classic_dark',
-    name: 'کلاسیک شب تلگرام',
+    name: 'کلاسیک شب GODFATHER SQUAD',
     type: 'solid',
     value: '#0e1621',
     hasPattern: true

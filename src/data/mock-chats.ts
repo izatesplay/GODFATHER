@@ -38,9 +38,9 @@ export const INITIAL_CHATS: Chat[] = [
     unreadCount: 0,
     isPinned: false,
     isMuted: false,
-    description: 'فضای ابری نامحدود شما در تلگرام برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها',
+    description: 'فضای ابری نامحدود شما در GODFATHER SQUAD برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها',
     lastMessage: {
-      text: 'به فضای ابری شخصی تلگرام خوش آمدید. پیام‌ها و فایل‌های خود را اینجا ذخیره کنید.',
+      text: 'به فضای ابری شخصی GODFATHER SQUAD خوش آمدید. پیام‌ها و فایل‌های خود را اینجا ذخیره کنید.',
       timestamp: 'هم‌اکنون',
       isOutgoing: true,
       status: 'read'
@@ -78,7 +78,7 @@ export const INITIAL_MESSAGES: Record<string, Message[]> = {
       senderName: ADMIN_USER.name,
       senderAvatar: ADMIN_USER.avatar,
       isOutgoing: true,
-      text: 'به فضای ابری شخصی تلگرام خوش آمدید.\nشما می‌توانید هر متن، عکس، ویدیو یا سندی را از حافظه دستگاه خود در اینجا آپلود و نگهداری کنید.',
+      text: 'به فضای ابری شخصی GODFATHER SQUAD خوش آمدید.\nشما می‌توانید هر متن، عکس، ویدیو یا سندی را از حافظه دستگاه خود در اینجا آپلود و نگهداری کنید.',
       type: 'text',
       reactions: [{ emoji: '☁️', count: 1 }],
       status: 'read',
@@ -90,7 +90,7 @@ export const INITIAL_MESSAGES: Record<string, Message[]> = {
       id: 'msg_support_welcome',
       chatId: 'chat_official_support',
       senderId: 'usr_system',
-      senderName: 'سیستم تلگرام GODFATHER SQUAD',
+      senderName: 'سیستم GODFATHER SQUAD',
       senderAvatar: 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=150&auto=format&fit=crop&q=80',
       isOutgoing: false,
       text: 'سامانه در حالت نهایی قرار دارد و پل ارتباطی با دیتابیس فعال است.',
@@ -102,7 +102,7 @@ export const INITIAL_MESSAGES: Record<string, Message[]> = {
   ]
 };
 
-// استوری‌های اولیه استاندارد تلگرام
+// استوری‌های اولیه استاندارد GODFATHER SQUAD
 export const INITIAL_STORIES: Story[] = [
   {
     id: 'story_godfather_1',
@@ -124,7 +124,7 @@ export const INITIAL_STORIES: Story[] = [
     userAvatar: 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=150&auto=format&fit=crop&q=80',
     mediaUrl: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=800&auto=format&fit=crop&q=80',
     mediaType: 'image',
-    caption: 'امکان برقراری تماس ویدیویی و وب‌کم در گفتگوهای صوتی گروهی تلگرام فعال گردید 📹✨',
+    caption: 'امکان برقراری تماس ویدیویی و وب‌کم در گفتگوهای صوتی گروهی GODFATHER SQUAD فعال گردید 📹✨',
     expiryHours: 24,
     timestamp: '۱ ساعت پیش',
     viewsCount: 98,
@@ -132,15 +132,15 @@ export const INITIAL_STORIES: Story[] = [
   }
 ];
 
-// مینی‌اپلیکیشن‌های استاندارد تلگرام
+// مینی‌اپلیکیشن‌های استاندارد GODFATHER SQUAD
 export const INITIAL_MINI_APPS: MiniApp[] = [
   {
     id: 'app_clicker',
     title: 'Pulse Tap & Stars (بازی کلیکر)',
     icon: '⚡',
-    description: 'کسب امتیاز و ستاره‌های تلگرام با ضربه زدن، قابلیت انتقال و جوایز پریمیوم',
+    description: 'کسب امتیاز و ستاره‌های GODFATHER SQUAD با ضربه زدن، قابلیت انتقال و جوایز پریمیوم',
     category: 'Games & Stars',
-    author: 'Telegram Apps',
+    author: 'GODFATHER SQUAD Apps',
     starsPrice: 0,
     type: 'clicker'
   },
@@ -148,9 +148,9 @@ export const INITIAL_MINI_APPS: MiniApp[] = [
     id: 'app_wallet',
     title: 'Pulse Web3 Wallet (کیف‌پول استارز)',
     icon: '💎',
-    description: 'مدیریت دارایی‌های تلگرام استارز، توکن‌های بومی و تراکنش‌های امن',
+    description: 'مدیریت دارایی‌های GODFATHER SQUAD استارز، توکن‌های بومی و تراکنش‌های امن',
     category: 'Finance & Crypto',
-    author: 'Telegram Foundation',
+    author: 'GODFATHER SQUAD Foundation',
     starsPrice: 50,
     type: 'wallet'
   },
@@ -158,9 +158,9 @@ export const INITIAL_MINI_APPS: MiniApp[] = [
     id: 'app_notes',
     title: 'Cloud Kanban & Tasks (مدیریت کارها)',
     icon: '📋',
-    description: 'برنامه‌ریزی تسک‌ها و مدیریت پروژه‌های شخصی داخل تلگرام',
+    description: 'برنامه‌ریزی تسک‌ها و مدیریت پروژه‌های شخصی داخل GODFATHER SQUAD',
     category: 'Productivity',
-    author: 'CloudPulse Team',
+    author: 'GODFATHER SQUAD Team',
     type: 'notes'
   }
 ];

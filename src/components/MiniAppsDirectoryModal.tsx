@@ -27,7 +27,7 @@ export const MiniAppsDirectoryModal: React.FC<MiniAppsDirectoryModalProps> = ({
               <Grid className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-bold text-white text-base">اکوسیستم Telegram Mini Apps (TMA)</h3>
+              <h3 className="font-bold text-white text-base">اکوسیستم GODFATHER Mini Apps (GMA)</h3>
               <p className="text-xs text-slate-400">وب‌اپلیکیشن‌های ساندباکس‌شده با پرداخت Stars و Haptic</p>
             </div>
           </div>

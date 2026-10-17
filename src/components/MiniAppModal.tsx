@@ -105,7 +105,7 @@ export const MiniAppModal: React.FC<MiniAppModalProps> = ({
                   <span className="text-amber-400">⚡</span>
                   <span>{clickerPoints.toLocaleString()}</span>
                 </div>
-                <p className="text-xs text-amber-300/80 mt-1">هر ۲۵ تپ = ۵ ستاره تلگرام پاداش!</p>
+                <p className="text-xs text-amber-300/80 mt-1">هر ۲۵ تپ = ۵ ستاره GODFATHER SQUAD پاداش!</p>
               </div>
 
               {/* Tap coin button */}

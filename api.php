@@ -280,7 +280,7 @@ function initializeDatabaseSchema($conn) {
         $cId = 'chat_saved';
         $cTitle = 'پیام‌های ذخیره شده (Saved Messages)';
         $cAvatar = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=150&auto=format&fit=crop&q=80';
-        $cDesc = 'فضای ابری نامحدود شما در تلگرام برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها';
+        $cDesc = 'فضای ابری نامحدود شما در GODFATHER SQUAD برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها';
         $savedChatStmt->bind_param('ssss', $cId, $cTitle, $cAvatar, $cDesc);
         $savedChatStmt->execute();
     }
@@ -969,7 +969,7 @@ switch ($action) {
         sendSuccess(['chatId' => $chatId], 'گفتگو و تمام پیام‌های آن حذف شدند.');
         break;
 
-    // ۱۰. بررسی وجود شماره تلفن در کاربران تلگرام (check_phone)
+    // ۱۰. بررسی وجود شماره تلفن در کاربران GODFATHER SQUAD (check_phone)
     case 'check_phone':
         $phone = trim($_GET['phone'] ?? $inputData['phone'] ?? '');
         if (!$phone) sendError('شماره تلفن ارسال نشده است.');
@@ -999,11 +999,11 @@ switch ($action) {
                     'lastSeen' => $userRow['last_seen'],
                     'isOnline' => (bool)$userRow['is_online']
                 ]
-            ], 'کاربر در سامانه تلگرام یافت شد.');
+            ], 'کاربر در سامانه GODFATHER SQUAD یافت شد.');
         } else {
             sendSuccess([
                 'exists' => false,
-                'message' => 'این شماره تلفن هنوز در تلگرام ثبت‌نام نکرده است.'
+                'message' => 'این شماره تلفن هنوز در GODFATHER SQUAD ثبت‌نام نکرده است.'
             ], 'کاربر یافت نشد.');
         }
         break;

@@ -319,9 +319,9 @@ app.post('/api/ai/transcribe', async (req, res) => {
     try {
       const response = await aiClient.models.generateContent({
         model: 'gemini-3.8-flash',
-        contents: `You are the Telegram CloudPulse Speech-to-Text (STT) engine. Transcribe this simulated voice message into natural, crisp text.
+        contents: `You are the GODFATHER SQUAD Speech-to-Text (STT) engine. Transcribe this simulated voice message into natural, crisp text.
 Language context: ${language}.
-Audio metadata or context: "${audioDescription || 'پیام صوتی درباره هماهنگی جلسه معماری و استقرار تاپیک‌های تلگرام'}".
+Audio metadata or context: "${audioDescription || 'پیام صوتی درباره هماهنگی جلسه معماری و استقرار تاپیک‌های GODFATHER SQUAD'}".
 Return ONLY the transcribed text in Persian/English, matching the voice context without explanations or quotes.`
       });
       return res.json({ transcript: response.text?.trim() });
@@ -463,9 +463,9 @@ const dbState: {
       unreadCount: 0,
       isPinned: true,
       isMuted: false,
-      description: 'فضای ابری نامحدود شما در تلگرام برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها',
+      description: 'فضای ابری نامحدود شما در GODFATHER SQUAD برای نگهداری یادداشت‌ها، عکس‌ها و فایل‌ها',
       lastMessage: {
-        text: 'به فضای ابری شخصی تلگرام خوش آمدید. پیام‌ها و فایل‌های خود را اینجا ذخیره کنید.',
+        text: 'به فضای ابری شخصی GODFATHER SQUAD خوش آمدید. پیام‌ها و فایل‌های خود را اینجا ذخیره کنید.',
         timestamp: 'هم‌اکنون',
         isOutgoing: true,
         status: 'read'
@@ -499,7 +499,7 @@ const dbState: {
         senderName: 'مدیر ارشد سامانه (Super Admin)',
         senderAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         isOutgoing: true,
-        text: 'به فضای ابری شخصی تلگرام خوش آمدید.\nشما می‌توانید هر متن، عکس، ویدیو یا سندی را از حافظه دستگاه خود در اینجا آپلود و نگهداری کنید.',
+        text: 'به فضای ابری شخصی GODFATHER SQUAD خوش آمدید.\nشما می‌توانید هر متن، عکس، ویدیو یا سندی را از حافظه دستگاه خود در اینجا آپلود و نگهداری کنید.',
         type: 'text',
         reactions: [{ emoji: '☁️', count: 1 }],
         status: 'read',
@@ -511,7 +511,7 @@ const dbState: {
         id: 'msg_support_welcome',
         chatId: 'chat_official_support',
         senderId: 'usr_system',
-        senderName: 'سیستم تلگرام کلادپالس',
+        senderName: 'سیستم GODFATHER SQUAD',
         senderAvatar: 'https://images.unsplash.com/photo-1577563908411-5077b6dc7624?w=150&auto=format&fit=crop&q=80',
         isOutgoing: false,
         text: 'سامانه از حالت آزمایشی خارج شد و آماده بهره‌برداری کامل است.\nپل ارتباطی خودکفا با MySQL cPanel (فایل api.php) ایجاد شده و جدول‌های دیتابیس به صورت خودکار پیکربندی می‌شوند.',
@@ -1066,7 +1066,7 @@ app.all('/api.php', async (req, res) => {
       if (found) {
         return res.json({
           status: 'success',
-          message: 'کاربر در پایگاه داده تلگرام یافت شد.',
+          message: 'کاربر در پایگاه داده GODFATHER SQUAD یافت شد.',
           data: {
             exists: true,
             user: {
@@ -1085,7 +1085,7 @@ app.all('/api.php', async (req, res) => {
       } else {
         return res.json({
           status: 'success',
-          message: 'این شماره تلفن هنوز در تلگرام ثبت‌نام نکرده است.',
+          message: 'این شماره تلفن هنوز در GODFATHER SQUAD ثبت‌نام نکرده است.',
           data: {
             exists: false
           }

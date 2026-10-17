@@ -64,6 +64,7 @@ import { Chat, ChatWallpaper } from '../types/telegram';
 import { SOLID_WALLPAPERS, GRADIENT_WALLPAPERS, DEFAULT_WALLPAPER } from '../data/wallpapers';
 import { ProfilePhotoViewerModal } from './ProfilePhotoViewerModal';
 import { getUserProfileLink, getDisplayDomain } from '../utils/linkHelper';
+import { notificationService } from '../utils/notificationSound';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -82,6 +83,7 @@ interface SettingsModalProps {
   currentWallpaper?: ChatWallpaper;
   onSelectWallpaper?: (wallpaper: ChatWallpaper) => void;
   onToggleBlockUser?: (userIdOrChatId: string, userName?: string) => void;
+  onTestNotification?: () => void;
 }
 
 type SettingsSection = 
@@ -103,7 +105,7 @@ type SettingsSection =
 const EMOJI_STATUS_LIST = ['👑', '⚡', '⭐', '💎', '🚀', '🔥', '🛡️', '🦄', '🪐', '💫', '🦅', '🎯'];
 
 const CHAT_THEMES = [
-  { id: 'blue', name: 'تلگرام کلاسیک', color: '#2481cc', bg: '#0e1621' },
+  { id: 'blue', name: 'GODFATHER کلاسیک', color: '#2481cc', bg: '#0e1621' },
   { id: 'purple', name: 'بنفش سلطنتی', color: '#8b5cf6', bg: '#170f2c' },
   { id: 'emerald', name: 'زمردی تیره', color: '#10b981', bg: '#0a1d17' },
   { id: 'amber', name: 'طلایی پریمیوم', color: '#f59e0b', bg: '#1c1608' },
@@ -127,7 +129,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenPwaInstall,
   currentWallpaper = DEFAULT_WALLPAPER,
   onSelectWallpaper,
-  onToggleBlockUser
+  onToggleBlockUser,
+  onTestNotification
 }) => {
   const [currentSection, setCurrentSection] = useState<SettingsSection>(initialSection);
   const [wallpaperCategory, setWallpaperCategory] = useState<'solid' | 'gradient' | 'custom'>(() => {
@@ -255,9 +258,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [notifPrivate, setNotifPrivate] = useState(true);
   const [notifGroups, setNotifGroups] = useState(true);
   const [notifChannels, setNotifChannels] = useState(false);
-  const [inAppSounds, setInAppSounds] = useState(true);
-  const [inAppVibrate, setInAppVibrate] = useState(true);
-  const [inAppPreview, setInAppPreview] = useState(true);
+  const [inAppSounds, setInAppSounds] = useState(() => notificationService.isSoundEnabled());
+  const [inAppVibrate, setInAppVibrate] = useState(() => notificationService.isVibrationEnabled());
+  const [inAppPreview, setInAppPreview] = useState(() => notificationService.isBannerEnabled());
+  const [systemPermission, setSystemPermission] = useState<NotificationPermission | 'unsupported'>(() => notificationService.getPermissionStatus());
 
   // Data & Storage State
   const [cacheSize, setCacheSize] = useState(545);
@@ -280,8 +284,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   // Active Sessions State
   const [sessions, setSessions] = useState([
     { id: 'sess_1', device: 'CloudPulse Web K (مرورگر جاری)', ip: '185.120.44.10 • تهران، ایران', online: true, lastActive: 'هم‌اکنون فعال' },
-    { id: 'sess_2', device: 'Telegram Android 11.2 (Samsung Galaxy S24)', ip: '178.252.140.22 • تهران', online: false, lastActive: '۲ ساعت پیش' },
-    { id: 'sess_3', device: 'Telegram Desktop for macOS (Apple Silicon)', ip: '185.190.35.12 • فرانکفورت', online: false, lastActive: 'دیروز ۱۸:۳۰' }
+    { id: 'sess_2', device: 'GODFATHER SQUAD Android (Samsung Galaxy S24)', ip: '178.252.140.22 • تهران', online: false, lastActive: '۲ ساعت پیش' },
+    { id: 'sess_3', device: 'GODFATHER SQUAD Desktop for macOS', ip: '185.190.35.12 • فرانکفورت', online: false, lastActive: 'دیروز ۱۸:۳۰' }
   ]);
 
   // Language & Translation State
@@ -476,7 +480,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <h3 className="font-extrabold text-white text-base">
               {currentSection === 'main' && 'تنظیمات (Settings)'}
               {currentSection === 'edit_profile' && 'ویرایش اطلاعات حساب'}
-              {currentSection === 'premium' && 'تلگرام پریمیوم (Telegram Premium)'}
+              {currentSection === 'premium' && 'GODFATHER SQUAD پریمیوم (GODFATHER Premium)'}
               {currentSection === 'chat_settings' && 'تنظیمات گفتگوها (Chat Settings)'}
               {currentSection === 'privacy_security' && 'حریم خصوصی و امنیت'}
               {currentSection === 'two_step_verification' && 'تأیید دو مرحله‌ای (۲FA)'}
@@ -486,7 +490,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {currentSection === 'devices' && 'دستگاه‌ها و نشست‌های فعال'}
               {currentSection === 'language' && 'زبان و ترجمه'}
               {currentSection === 'blocked_users' && 'کاربران مسدود شده'}
-              {currentSection === 'faq' && 'پرسش‌های متداول تلگرام'}
+              {currentSection === 'faq' && 'پرسش‌های متداول GODFATHER SQUAD'}
             </h3>
           </div>
 
@@ -609,7 +613,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div className="text-right">
                       <div className="font-extrabold text-white text-sm flex items-center gap-1.5">
-                        <span>Telegram Premium</span>
+                        <span>GODFATHER Premium</span>
                         {currentUser.isPremium && (
                           <span className="text-[10px] px-1.5 py-0.2 bg-amber-400 text-black font-bold rounded-full">
                             فعال
@@ -688,7 +692,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   },
                   {
                     id: 'faq',
-                    title: 'راهنما و سوالات متداول (Telegram FAQ)',
+                    title: 'راهنما و سوالات متداول (FAQ)',
                     subtitle: 'امنیت، سوالات رایج و معماری CloudPulse',
                     icon: HelpCircle,
                     color: 'text-teal-400',
@@ -1075,7 +1079,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div>
                   <h3 className="text-lg font-extrabold text-white flex items-center justify-center gap-1.5">
-                    <span>Telegram Premium Ecosystem</span>
+                    <span>GODFATHER Premium Ecosystem</span>
                     <Sparkles className="w-4 h-4 text-amber-400" />
                   </h3>
                   <p className="text-xs text-slate-300 mt-1">
@@ -1099,7 +1103,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="p-3.5 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-center">
                       <div className="text-amber-300 font-extrabold text-xs sm:text-sm flex items-center justify-center gap-1.5">
                         <Crown className="w-4 h-4 text-amber-400" />
-                        <span>اشتراک تلگرام پریمیوم شما فعال است</span>
+                        <span>اشتراک GODFATHER SQUAD پریمیوم شما فعال است</span>
                       </div>
                       <div className="text-[11px] text-slate-300 mt-1">
                         این اشتراک توسط مدیریت کل سامانه به حساب شما اختصاص یافته است.
@@ -1118,7 +1122,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           className="w-full py-3 rounded-2xl font-extrabold text-sm bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white transition-all cursor-pointer shadow-lg shadow-purple-600/30 flex items-center justify-center gap-2"
                         >
                           <Sparkles className="w-4 h-4 text-amber-300" />
-                          <span>درخواست ارتقا به تلگرام پریمیوم</span>
+                          <span>درخواست ارتقا به GODFATHER SQUAD پریمیوم</span>
                         </button>
                       )}
                       <p className="text-[11px] text-slate-400 text-center">
@@ -1441,7 +1445,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                       className="rounded accent-cyan-500 w-4 h-4 cursor-pointer"
                     />
-                    <span>نمایش پترن نقطه‌ای ظریف تلگرام (Pattern Overlay)</span>
+                    <span>نمایش پترن نقطه‌ای ظریف (Pattern Overlay)</span>
                   </label>
 
                   <button
@@ -1673,7 +1677,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="p-4 rounded-2xl bg-cyan-950/40 border border-cyan-800/50 text-xs text-cyan-200 leading-relaxed space-y-1">
                 <div className="font-bold flex items-center gap-1.5 text-cyan-300">
                   <ShieldCheck className="w-4 h-4" />
-                  <span>پروتکل SRP-6a تلگرام فعال است</span>
+                  <span>پروتکل امنیتی SRP-6a فعال است</span>
                 </div>
                 <p>
                   رمز عبور ابری شما در سمت سرور هش نمی‌شود، بلکه محاسبات با پروتکل ریاضی ضرب هم‌نهشتی و اثبات دانایی صفر (Zero-Knowledge) انجام می‌گیرد.
@@ -1735,28 +1739,133 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               7. NOTIFICATIONS AND SOUNDS
              ============================================================ */}
           {currentSection === 'notifications' && (
-            <div className="p-4 sm:p-5 space-y-3">
-              {[
-                { title: 'گفتگوهای خصوصی (Private Chats)', desc: 'اعلان دریافت پیام‌های دونفره', checked: notifPrivate, set: setNotifPrivate },
-                { title: 'گروه‌ها و سوپرگروه‌ها (Groups)', desc: 'اعلان‌های گفتگوهای گروهی و تاپیک‌ها', checked: notifGroups, set: setNotifGroups },
-                { title: 'کانال‌ها (Channels)', desc: 'اعلان پست‌های جدید کانال‌های عضو شده', checked: notifChannels, set: setNotifChannels },
-                { title: 'صداهای درون‌برنامه‌ای (In-App Sounds)', desc: 'پخش صدای بوق ارسال و دریافت پیام', checked: inAppSounds, set: setInAppSounds },
-                { title: 'لرزش درون برنامه (In-App Vibrate)', desc: 'ویبره هنگام ارسال و دریافت بازخورد', checked: inAppVibrate, set: setInAppVibrate },
-                { title: 'پیش‌نمایش متن پیام (In-App Preview)', desc: 'نمایش خلاصه محتوا در بالای صفحه', checked: inAppPreview, set: setInAppPreview }
-              ].map((item, idx) => (
-                <div key={idx} className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800">
-                  <div>
-                    <div className="text-xs font-bold text-white">{item.title}</div>
-                    <div className="text-[11px] text-slate-400">{item.desc}</div>
+            <div className="p-4 sm:p-5 space-y-4">
+              {/* Quick Live Test Card */}
+              <div className="p-4 rounded-2xl bg-gradient-to-r from-cyan-950/50 via-blue-950/40 to-slate-900 border border-cyan-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg">
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center flex-shrink-0 border border-cyan-500/40">
+                    <Bell className="w-5 h-5 animate-pulse" />
                   </div>
-                  <input
-                    type="checkbox"
-                    checked={item.checked}
-                    onChange={(e) => item.set(e.target.checked)}
-                    className="w-4 h-4 accent-cyan-500 cursor-pointer"
-                  />
+                  <div>
+                    <div className="text-xs font-extrabold text-white">تست فوری سیستم اعلان و صدا</div>
+                    <div className="text-[11px] text-slate-300">بررسی پخش بوق کریستالی و نمایش بنر بالای صفحه</div>
+                  </div>
                 </div>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    notificationService.unlockAudio();
+                    notificationService.playChime();
+                    notificationService.vibrate();
+                    onTestNotification?.();
+                  }}
+                  className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-black font-extrabold text-xs transition-all shadow-md shadow-cyan-500/20 flex items-center justify-center gap-2 cursor-pointer flex-shrink-0 active:scale-95"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  <span>تست صدا و نوتیفیکیشن</span>
+                </button>
+              </div>
+
+              {/* System Browser Notifications Permission Card */}
+              <div className="p-4 rounded-2xl bg-slate-900/70 border border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                    <span>اعلان‌های پس‌زمینه سیستم (Web Notification API):</span>
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                    systemPermission === 'granted' 
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                      : systemPermission === 'denied' 
+                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30' 
+                      : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  }`}>
+                    {systemPermission === 'granted' ? 'مجوز فعال است' : systemPermission === 'denied' ? 'مسدود شده توسط کاربر' : 'نیاز به تأیید'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-400 leading-relaxed">
+                  هنگامی که پنجره برنامه کوچک است یا روی تب دیگری هستید، پیام‌ها در بالای صفحه گوشی یا گوشه دسکتاپ ظاهر می‌شوند.
+                </p>
+                {systemPermission !== 'granted' && systemPermission !== 'unsupported' && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const perm = await notificationService.requestSystemPermission();
+                      setSystemPermission(perm);
+                    }}
+                    className="w-full py-2 bg-slate-800 hover:bg-slate-700 text-cyan-300 text-xs font-bold rounded-xl border border-cyan-500/30 transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>درخواست مجوز اعلان‌های سیستم</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Preference Toggles */}
+              <div className="space-y-2">
+                {[
+                  { 
+                    title: 'گفتگوهای خصوصی (Private Chats)', 
+                    desc: 'اعلان دریافت پیام‌های دونفره', 
+                    checked: notifPrivate, 
+                    onChange: (c: boolean) => setNotifPrivate(c) 
+                  },
+                  { 
+                    title: 'گروه‌ها و سوپرگروه‌ها (Groups)', 
+                    desc: 'اعلان‌های گفتگوهای گروهی و تاپیک‌ها', 
+                    checked: notifGroups, 
+                    onChange: (c: boolean) => setNotifGroups(c) 
+                  },
+                  { 
+                    title: 'کانال‌ها (Channels)', 
+                    desc: 'اعلان پست‌های جدید کانال‌های عضو شده', 
+                    checked: notifChannels, 
+                    onChange: (c: boolean) => setNotifChannels(c) 
+                  },
+                  { 
+                    title: 'صداهای اعلان (Notification Sounds)', 
+                    desc: 'پخش صدای بوق کریستالی هنگام دریافت پیام در هر دستگاه', 
+                    checked: inAppSounds, 
+                    onChange: (c: boolean) => {
+                      setInAppSounds(c);
+                      notificationService.setSoundEnabled(c);
+                      if (c) notificationService.playChime();
+                    } 
+                  },
+                  { 
+                    title: 'لرزش و هپتیک (Haptic Vibration)', 
+                    desc: 'ویبره نرم روی گوشی هنگام دریافت پیام', 
+                    checked: inAppVibrate, 
+                    onChange: (c: boolean) => {
+                      setInAppVibrate(c);
+                      notificationService.setVibrationEnabled(c);
+                      if (c) notificationService.vibrate();
+                    } 
+                  },
+                  { 
+                    title: 'پیش‌نمایش در بالای صفحه (Heads-Up Banner)', 
+                    desc: 'اسلاید کارت پیام در نوار بالایی صفحه عین مسنجرهای موبایل', 
+                    checked: inAppPreview, 
+                    onChange: (c: boolean) => {
+                      setInAppPreview(c);
+                      notificationService.setBannerEnabled(c);
+                    } 
+                  }
+                ].map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-900/60 border border-slate-800 hover:border-slate-700/80 transition-colors">
+                    <div className="min-w-0 flex-1 pl-3">
+                      <div className="text-xs font-bold text-white">{item.title}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">{item.desc}</div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={item.checked}
+                      onChange={(e) => item.onChange(e.target.checked)}
+                      className="w-4 h-4 accent-cyan-500 cursor-pointer flex-shrink-0"
+                    />
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1794,7 +1903,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {cacheCleared && (
                   <div className="text-xs text-emerald-400 flex items-center gap-1.5">
                     <Check className="w-3.5 h-3.5" />
-                    <span>حافظه کش تلگرام با موفقیت پاکسازی شد!</span>
+                    <span>حافظه کش با موفقیت پاکسازی شد!</span>
                   </div>
                 )}
                 <button
@@ -1950,7 +2059,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {currentSection === 'language' && (
             <div className="p-4 sm:p-5 space-y-4">
               <div className="space-y-2">
-                <label className="text-xs font-bold text-white">انتخاب زبان رابط کاربری تلگرام:</label>
+                <label className="text-xs font-bold text-white">انتخاب زبان رابط کاربری GODFATHER SQUAD:</label>
                 {[
                   { id: 'fa', name: 'فارسی (Persian)', native: 'فارسی' },
                   { id: 'en', name: 'English', native: 'English' },
@@ -2114,8 +2223,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {currentSection === 'faq' && (
             <div className="p-4 sm:p-5 space-y-3">
               {[
-                { q: 'تلگرام کلاودپالس چیست؟', a: 'پیام‌رسان متمرکز بر سرعت و امنیت با فناوری توزیع‌شده ScyllaDB و پروتکل سرتاسری E2EE مشابه نسخه رسمی تلگرام وب.' },
-                { q: 'چگونه حساب تلگرام پریمیوم دریافت کنم؟', a: 'از طریق بخش Telegram Premium در تنظیمات می‌توانید قابلیت‌ها را مشاهده کنید؛ فعال‌سازی نهایی حساب‌ها توسط مدیران سیستم انجام می‌پذیرد.' },
+                { q: 'GODFATHER SQUAD چیست؟', a: 'پیام‌رسان متمرکز بر سرعت و امنیت با فناوری توزیع‌شده و پروتکل سرتاسری E2EE.' },
+                { q: 'چگونه حساب GODFATHER پریمیوم دریافت کنم؟', a: 'از طریق بخش GODFATHER Premium در تنظیمات می‌توانید قابلیت‌ها را مشاهده کنید؛ فعال‌سازی نهایی حساب‌ها توسط مدیران سیستم انجام می‌پذیرد.' },
                 { q: 'رمزنگاری E2EE چگونه کار می‌کند؟', a: 'در چت‌های محرمانه (Secret Chat) و تماس‌های WebRTC، کلیدها به صورت محلی بین دو مرورگر با پروتکل ECDH تبادل شده و با ۴ اموجی احراز اصالت می‌شوند.' },
                 { q: 'حجم مجاز فایل‌ها چقدر است؟', a: 'کاربران عادی تا ۲ گیگابایت و کاربران پریمیوم تا ۴ گیگابایت برای هر فایل می‌توانند آپلود کنند.' }
               ].map((item, idx) => (

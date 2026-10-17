@@ -68,7 +68,7 @@ interface CallModalProps {
   groupMessages?: Message[];
 }
 
-// لیست شرکت‌کنندگان پیش‌فرض تلگرام برای سناریوی ۱۰ نفره زنده
+// لیست شرکت‌کنندگان پیش‌فرض GODFATHER SQUAD برای سناریوی ۱۰ نفره زنده
 const SAMPLE_GROUP_PARTICIPANTS: CallParticipant[] = [
   {
     id: 'usr_p1_reza',
@@ -387,7 +387,7 @@ export const CallModal: React.FC<CallModalProps> = ({
 
   const totalCount = participantsList.length;
 
-  // کلاس‌های شبکه (Grid Layout) الهام‌گرفته از ساختار باز تلگرام وب
+  // کلاس‌های شبکه (Grid Layout) استاندارد GODFATHER SQUAD
   const getGridClasses = (count: number) => {
     if (count <= 1) return 'grid-cols-1 auto-rows-fr';
     if (count === 2) return 'grid-cols-1 sm:grid-cols-2 auto-rows-fr';

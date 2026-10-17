@@ -62,7 +62,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   
   // Broadcast state
   const [broadcastTitle, setBroadcastTitle] = useState('اطلاعیه مهم مدیریت کل');
-  const [broadcastBody, setBroadcastBody] = useState('تمامی امکانات تلگرام پریمیوم به صورت نامحدود در اختیار کاربران قرار گرفت.');
+  const [broadcastBody, setBroadcastBody] = useState('تمامی امکانات GODFATHER SQUAD پریمیوم به صورت نامحدود در اختیار کاربران قرار گرفت.');
   const [pinBroadcast, setPinBroadcast] = useState(true);
   const [broadcastSuccess, setBroadcastSuccess] = useState(false);
 
@@ -80,7 +80,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const [auditLogs, setAuditLogs] = useState<{ id: string; time: string; text: string }[]>([
     { id: '1', time: '۱۲:۲۰', text: 'ورود مدیر کل با شماره 09921758505 ثبت شد.' },
     { id: '2', time: '۱۲:۲۲', text: 'ارتقای دسترسی کاربر @reza_db به Moderator' },
-    { id: '3', time: '۱۲:۲۵', text: 'اعطای ۵۰۰ ستاره تلگرام به صندوق عمومی' }
+    { id: '3', time: '۱۲:۲۵', text: 'اعطای ۵۰۰ ستاره GODFATHER SQUAD به صندوق عمومی' }
   ]);
 
   // System feature toggles
@@ -138,7 +138,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
       {
         id: Date.now().toString(),
         time: new Date().toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' }),
-        text: `اهدای ${amount.toLocaleString()} ستاره تلگرام به کاربر @${u.username}`
+        text: `اهدای ${amount.toLocaleString()} ستاره GODFATHER SQUAD به کاربر @${u.username}`
       },
       ...prev
     ]);
@@ -230,7 +230,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-white text-base sm:text-lg">پنل مدیریت ارشد تلگرام</h2>
+                <h2 className="font-extrabold text-white text-base sm:text-lg">پنل مدیریت ارشد GODFATHER SQUAD</h2>
                 <span className="text-[10px] bg-amber-400 text-black font-bold px-2 py-0.5 rounded-full font-mono">
                   09921758505
                 </span>

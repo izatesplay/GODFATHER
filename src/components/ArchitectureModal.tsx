@@ -137,7 +137,7 @@ export const ArchitectureModal: React.FC<ArchitectureModalProps> = ({ isOpen, on
             <div className="space-y-6">
               <div className="p-4 rounded-xl bg-cyan-950/30 border border-cyan-800/40 text-cyan-200 text-sm leading-relaxed">
                 <strong>پروتکل Secure Remote Password (SRP-6a) با هش سخت‌افزاری Argon2id:</strong>
-                در این پروتکل احراز هویت دوعاملی تلگرام، رمز عبور کاربر هرگز و تحت هیچ شرایطی از کلاینت به سرور ارسال نمی‌شود (Zero-Knowledge Proof). محاسبات با کلید‌های یکبار مصرف Ephemeral و ضرب هم‌نهشتی اعداد بزرگ انجام می‌گیرد.
+                در این پروتکل احراز هویت دوعاملی پیشرفته، رمز عبور کاربر هرگز و تحت هیچ شرایطی از کلاینت به سرور ارسال نمی‌شود (Zero-Knowledge Proof). محاسبات با کلید‌های یکبار مصرف Ephemeral و ضرب هم‌نهشتی اعداد بزرگ انجام می‌گیرد.
               </div>
 
               {/* Step indicator */}

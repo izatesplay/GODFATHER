@@ -309,7 +309,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-500 to-blue-600 flex items-center justify-center text-white mx-auto shadow-lg shadow-cyan-500/25 mb-2.5">
             <ShieldCheck className="w-8 h-8" />
           </div>
-          <h2 className="text-lg sm:text-xl font-extrabold text-white">ورود و ثبت‌نام در تلگرام</h2>
+          <h2 className="text-lg sm:text-xl font-extrabold text-white">ورود و ثبت‌نام در GODFATHER SQUAD</h2>
           <p className="text-xs text-slate-400 mt-0.5">
             احراز هویت امن با نام کاربری و کلمه عبور
           </p>
@@ -402,7 +402,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
                 type="submit"
                 className="w-full py-3 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-extrabold text-sm rounded-xl shadow-lg shadow-cyan-500/25 transition-all cursor-pointer flex items-center justify-center gap-2 mt-4"
               >
-                <span>ورود به تلگرام</span>
+                <span>ورود به GODFATHER SQUAD</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>

@@ -213,10 +213,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setIsCheckingPhone(false);
 
     if (matchedUser) {
-      // کاربر در پایگاه‌داده وجود دارد -> ایجاد مخاطب واقعی متصل به تلگرام
+      // کاربر در پایگاه‌داده وجود دارد -> ایجاد مخاطب واقعی متصل به GODFATHER SQUAD
       const newC: Contact = {
         id: matchedUser.id || `cnt_${Date.now()}`,
-        name: newContactName.trim() || matchedUser.name || 'مخاطب تلگرام',
+        name: newContactName.trim() || matchedUser.name || 'مخاطب GODFATHER SQUAD',
         phone: matchedUser.phone || newContactPhone.trim(),
         avatar: matchedUser.avatar || newContactAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
         status: matchedUser.isOnline ? 'آنلاین' : 'آخرین بازدید به تازگی',
@@ -235,7 +235,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       // شروع آنی گفتگو با مخاطب
       handleStartChatWithContact(newC);
 
-      setContactSuccessToast(`مخاطب «${newC.name}» با موفقیت به تلگرام متصل شد.`);
+      setContactSuccessToast(`مخاطب «${newC.name}» با موفقیت به GODFATHER SQUAD متصل شد.`);
       setTimeout(() => setContactSuccessToast(null), 3500);
 
       setNewContactName('');
@@ -243,7 +243,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setNewContactAvatar('');
       setShowAddContactModal(false);
     } else {
-      // شماره در دیتابیس وجود ندارد -> نمایش پنجره دعوت تلگرام
+      // شماره در دیتابیس وجود ندارد -> نمایش پنجره دعوت GODFATHER SQUAD
       setPhoneNotFoundModal({
         open: true,
         phone: newContactPhone.trim()
@@ -1222,12 +1222,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
             
             <div className="space-y-1.5">
-              <h3 className="text-sm font-extrabold text-white">این شماره در تلگرام عضو نیست!</h3>
+              <h3 className="text-sm font-extrabold text-white">این شماره در GODFATHER SQUAD عضو نیست!</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                شماره <span className="font-mono text-cyan-300 font-bold" dir="ltr">{phoneNotFoundModal.phone}</span> در پایگاه‌داده کاربران تلگرام یافت نشد.
+                شماره <span className="font-mono text-cyan-300 font-bold" dir="ltr">{phoneNotFoundModal.phone}</span> در پایگاه‌داده کاربران GODFATHER SQUAD یافت نشد.
               </p>
               <p className="text-[11px] text-slate-400">
-                در تلگرام فقط شماره‌هایی که در دیتابیس حساب کاربری دارند می‌توانند به عنوان مخاطب فعال اضافه شوند. شما می‌توانید لینک دعوت اختصاصی تلگرام وب (Web2App) را برای ایشان ارسال کنید.
+                در GODFATHER SQUAD فقط شماره‌هایی که در دیتابیس حساب کاربری دارند می‌توانند به عنوان مخاطب فعال اضافه شوند. شما می‌توانید لینک دعوت اختصاصی GODFATHER SQUAD را برای ایشان ارسال کنید.
               </p>
             </div>
 
@@ -1255,7 +1255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-cyan-500/25 cursor-pointer transition-all"
               >
                 {inviteCopied ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
-                <span>{inviteCopied ? 'لینک دعوت تلگرام کپی شد!' : 'کپی لینک دعوت'}</span>
+                <span>{inviteCopied ? 'لینک دعوت GODFATHER SQUAD کپی شد!' : 'کپی لینک دعوت'}</span>
               </button>
 
               <button

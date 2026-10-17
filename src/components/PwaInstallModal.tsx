@@ -89,7 +89,7 @@ export const PwaInstallModal: React.FC<PwaInstallModalProps> = ({
             </div>
             <h4 className="text-sm font-bold text-white">برنامه روی گوشی شما نصب شده است!</h4>
             <p className="text-xs text-emerald-200/80">
-              می‌توانید تلگرام وب را مستقیماً مانند یک اپلیکیشن بومی از صفحه اصلی گوشی خود اجرا کنید.
+              می‌توانید GODFATHER SQUAD را مستقیماً مانند یک اپلیکیشن بومی از صفحه اصلی گوشی خود اجرا کنید.
             </p>
           </div>
         ) : (

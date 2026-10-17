@@ -1,5 +1,5 @@
 /**
- * سرویس ترجمه هوشمند و زنده تلگرام (Google Translate Engine & Multi-Tier Fallback)
+ * سرویس ترجمه هوشمند و زنده GODFATHER SQUAD (Google Translate Engine & Multi-Tier Fallback)
  * بدون نیاز به کلید API - قابلیت کارکرد ۱۰۰٪ مستقل روی هاست‌های اشتراکی cPanel، سرورهای ابری و کلاینت
  */
 

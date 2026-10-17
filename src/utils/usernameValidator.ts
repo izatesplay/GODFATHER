@@ -8,7 +8,7 @@ export function cleanUsername(raw: string): string {
 }
 
 /**
- * بررسی صحت فرمت نام کاربری (استاندارد تلگرام: ۳ تا ۳۲ نویسه، حروف انگلیسی، اعداد و خط زیر)
+ * بررسی صحت فرمت نام کاربری (استاندارد GODFATHER SQUAD: ۳ تا ۳۲ نویسه، حروف انگلیسی، اعداد و خط زیر)
  */
 export function validateUsernameFormat(raw: string): { isValid: boolean; error?: string } {
   const clean = cleanUsername(raw);

@@ -188,7 +188,7 @@ export function normalizePhoneNumber(phone: string): string {
 }
 
 /**
- * استعلام وضعیت ثبت‌نام شماره در پایگاه‌داده تلگرام (MySQL / server)
+ * استعلام وضعیت ثبت‌نام شماره در پایگاه‌داده GODFATHER SQUAD (MySQL / server)
  */
 export async function checkPhoneInDatabase(phone: string): Promise<{
   success: boolean;

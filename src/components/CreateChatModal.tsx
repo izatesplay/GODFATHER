@@ -476,7 +476,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 </div>
                 <div>
                   <div className="text-xs font-bold text-white">فعال‌سازی تاپیک‌ها (Supergroup Topics)</div>
-                  <div className="text-[10px] text-slate-400">تقسیم گفتگو به اتاق‌های مجزا مثل دیسکورد و تلگرام</div>
+                  <div className="text-[10px] text-slate-400">تقسیم گفتگو به موضوعات و اتاق‌های مجزا در سوپرگروه</div>
                 </div>
               </div>
               <input

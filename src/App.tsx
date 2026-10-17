@@ -42,6 +42,8 @@ import { AuthModal } from './components/AuthModal';
 import { PwaInstallModal } from './components/PwaInstallModal';
 import { ForwardMessageModal } from './components/ForwardMessageModal';
 import { DeleteMessageModal } from './components/DeleteMessageModal';
+import { NotificationBanner, InAppNotification } from './components/NotificationBanner';
+import { notificationService } from './utils/notificationSound';
 import { parseDeepLinkParams } from './utils/linkHelper';
 import { getSenderFriendlyName } from './utils/senderHelper';
 import { ShieldCheck, Sparkles, Crown, ShieldAlert, UserX, X, Share2, Trash2 } from 'lucide-react';
@@ -177,6 +179,58 @@ export default function App() {
   const [forwardingMessages, setForwardingMessages] = useState<Message[] | null>(null);
   const [selectedMessageIds, setSelectedMessageIds] = useState<string[]>([]);
   const [deleteModalMessages, setDeleteModalMessages] = useState<Message[] | null>(null);
+
+  // In-App Heads-Up Notification State
+  const [inAppNotification, setInAppNotification] = useState<InAppNotification | null>(null);
+
+  const triggerInAppNotification = useCallback(
+    (
+      message: Partial<Message> & { senderName?: string; senderAvatar?: string; text?: string },
+      chatId: string,
+      isBroadcast: boolean = false
+    ) => {
+      const chat = chats.find((c) => c.id === chatId);
+      const senderTitle = message.senderName || chat?.title || 'پیام جدید';
+      const senderAvatar = message.senderAvatar || chat?.avatar;
+      const textPreview =
+        message.text ||
+        (message.type === 'photo'
+          ? '📷 یک تصویر ارسال کرد'
+          : message.type === 'voice'
+          ? '🎤 یک پیام صوتی ارسال کرد'
+          : message.type === 'video'
+          ? '🎬 یک ویدیو ارسال کرد'
+          : 'یک فایل ارسال کرد');
+
+      // 1. Play sound chime & mobile haptics & background push
+      notificationService.notifyIncomingMessage({
+        senderName: senderTitle,
+        text: textPreview,
+        avatar: senderAvatar,
+        chatId,
+        isCurrentChatActive: activeChatId === chatId,
+        isTabFocused: typeof document !== 'undefined' && document.visibilityState === 'visible' && document.hasFocus(),
+        onOpenChat: () => {
+          setActiveChatId(chatId);
+          setMobileView('chat');
+        }
+      });
+
+      // 2. Display in-app heads-up banner at top of screen
+      if (notificationService.isBannerEnabled()) {
+        setInAppNotification({
+          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          chatId,
+          senderName: senderTitle,
+          senderAvatar,
+          text: textPreview,
+          timestamp: message.timestamp || 'هم‌اکنون',
+          isBroadcast
+        });
+      }
+    },
+    [activeChatId, chats]
+  );
 
   // Clear message selection whenever active chat switches
   useEffect(() => {
@@ -453,6 +507,14 @@ export default function App() {
                 const nonDuplicates = remoteList.filter((m) => !localSet.has(m.id));
                 if (nonDuplicates.length > 0) {
                   merged[cId] = [...merged[cId], ...nonDuplicates];
+                  // Notify user of new incoming messages from other devices/users
+                  const incomingList = nonDuplicates.filter(
+                    (m) => !m.isOutgoing && (!currentUser || m.senderId !== currentUser.id)
+                  );
+                  if (incomingList.length > 0) {
+                    const latest = incomingList[incomingList.length - 1];
+                    triggerInAppNotification(latest, cId);
+                  }
                 }
               }
             }
@@ -773,12 +835,12 @@ export default function App() {
   const handleBotResponse = (botId: string, userText: string) => {
     let reply = 'دستور شما دریافت شد. برای دیدن راهنما /help را تایپ کنید.';
     if (userText.includes('/start')) {
-      reply = `خوش آمدید! دستیار هوشمند تلگرام در خدمت شماست.\n• /premium : بررسی امکانات پریمیوم\n• /stars : دریافت ستاره‌های آزمایشی\n• /help : راهنما`;
+      reply = `خوش آمدید! دستیار هوشمند GODFATHER SQUAD در خدمت شماست.\n• /premium : بررسی امکانات پریمیوم\n• /stars : دریافت ستاره‌های آزمایشی\n• /help : راهنما`;
     } else if (userText.includes('/premium')) {
       reply = `✨ وضعیت اکانت: ${currentUser?.isPremium ? 'پریمیوم فعال' : 'استاندارد رایگان'}\nسقف آپلود: ${currentUser?.isPremium ? '۴ گیگابایت' : '۲ گیگابایت'}\nمبدل ویس: فعال`;
     } else if (userText.includes('/stars')) {
       setUserStars((prev) => prev + 50);
-      reply = `⭐ ۵۰ ستاره تلگرام به کیف‌پول شما افزوده شد! موجودی فعلی: ${userStars + 50} Stars`;
+      reply = `⭐ ۵۰ ستاره GODFATHER SQUAD به کیف‌پول شما افزوده شد! موجودی فعلی: ${userStars + 50} Stars`;
     } else if (botId === 'chat_bot_crypto') {
       reply = `📊 استعلام زنده قیمت:\nTON: $6.84\nBTC: $94,200\nETH: $3,450\nتراکنش‌ها روی بلاکچین سریع‌تر از ۰.۸ ثانیه تایید می‌شوند.`;
     }
@@ -801,6 +863,8 @@ export default function App() {
       ...prev,
       [botId]: [...(prev[botId] || []), botMsg]
     }));
+
+    triggerInAppNotification(botMsg, botId);
   };
 
   // Transcribe voice message with backend API or AI
@@ -819,7 +883,7 @@ export default function App() {
       const res = await fetch('/api/ai/transcribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioDescription: 'پیام صوتی فنی درباره معماری تلگرام' })
+        body: JSON.stringify({ audioDescription: 'پیام صوتی فنی درباره معماری GODFATHER SQUAD' })
       });
       const data = await res.json();
       if (data.transcript) {
@@ -1454,7 +1518,7 @@ export default function App() {
       id: `msg_sys_${Date.now()}`,
       chatId,
       senderId: 'system',
-      senderName: 'سیستم تلگرام',
+      senderName: 'سیستم GODFATHER SQUAD',
       senderAvatar: '',
       timestamp: 'هم‌اکنون',
       type: 'text',
@@ -1500,7 +1564,7 @@ export default function App() {
       id: `msg_sys_admin_${Date.now()}`,
       chatId,
       senderId: 'system',
-      senderName: 'سیستم تلگرام',
+      senderName: 'سیستم GODFATHER SQUAD',
       senderAvatar: '',
       timestamp: 'هم‌اکنون',
       type: 'text',
@@ -2240,7 +2304,18 @@ export default function App() {
         }}
       />
 
-      {/* 10. Settings & Telegram Premium Hub */}
+      {/* In-App Heads-up Notification Banner (Top of Screen) */}
+      <NotificationBanner
+        notification={inAppNotification}
+        onClose={() => setInAppNotification(null)}
+        onOpenChat={(chatId) => {
+          setActiveChatId(chatId);
+          setMobileView('chat');
+          setInAppNotification(null);
+        }}
+      />
+
+      {/* 10. Settings & GODFATHER Premium Hub */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -2257,6 +2332,17 @@ export default function App() {
         currentWallpaper={chatWallpaper}
         onSelectWallpaper={setChatWallpaper}
         onToggleBlockUser={handleToggleBlockUser}
+        onTestNotification={() =>
+          triggerInAppNotification(
+            {
+              senderName: 'پشتیبانی GODFATHER SQUAD',
+              senderAvatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+              text: '🔔 سیستم اعلان دقیق و صدای بوق پیام‌رسان GODFATHER SQUAD روی دستگاه شما فعال است!',
+              timestamp: 'هم‌اکنون'
+            },
+            activeChatId || 'chat_saved'
+          )
+        }
       />
 
       {/* 11. PWA & Web2App Install Modal (without APK) */}
@@ -2267,7 +2353,7 @@ export default function App() {
         isInstalled={isAppInstalled}
       />
 
-      {/* 12. Forward Message Modal (Telegram Style: single or multi-message) */}
+      {/* 12. Forward Message Modal (GODFATHER SQUAD Style) */}
       <ForwardMessageModal
         isOpen={Boolean(forwardingMessages && forwardingMessages.length > 0)}
         onClose={() => setForwardingMessages(null)}
@@ -2276,7 +2362,7 @@ export default function App() {
         onForward={handleForwardMessages}
       />
 
-      {/* 13. Two-choice Delete Confirmation Modal (Telegram Style: Both sides vs Only for me) */}
+      {/* 13. Two-choice Delete Confirmation Modal (GODFATHER SQUAD Style) */}
       <DeleteMessageModal
         isOpen={Boolean(deleteModalMessages && deleteModalMessages.length > 0)}
         onClose={() => setDeleteModalMessages(null)}

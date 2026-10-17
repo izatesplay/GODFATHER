@@ -140,7 +140,7 @@ export function getSenderFriendlyName(
   // As explicitly required: "نباید شماره کاربر باشه باید اسم کاربر باشه"
   // Never display the raw phone number. Return a friendly user label.
   if (isPhone) {
-    return 'کاربر تلگرام';
+    return 'کاربر GODFATHER SQUAD';
   }
 
   return rawSenderOrName || 'کاربر';

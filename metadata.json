@@ -1,6 +1,6 @@
 {
   "name": "GODFATHER SQUAD",
-  "description": "GODFATHER SQUAD - Full-scale Telegram web messaging platform featuring Telegram Premium, E2EE Secret Chats, Group Voice Calls, Channels, and Mini Apps.",
+  "description": "GODFATHER SQUAD - Full-scale web messaging platform featuring Premium, E2EE Secret Chats, Group Voice Calls, Channels, and Mini Apps.",
   "requestFramePermissions": [
     "camera",
     "microphone",

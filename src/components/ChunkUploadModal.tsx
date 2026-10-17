@@ -130,7 +130,7 @@ export const ChunkUploadModal: React.FC<ChunkUploadModalProps> = ({
             <div>
               <h3 className="font-extrabold text-white text-base">آپلود ابری قطعه‌بندی‌شده (Chunked TUS)</h3>
               <p className="text-[11px] text-slate-400">
-                سقف آپلود: {isPremium ? '۴ گیگابایت (Telegram Premium)' : '۲ گیگابایت (حساب عادی)'}
+                سقف آپلود: {isPremium ? '۴ گیگابایت (GODFATHER Premium)' : '۲ گیگابایت (حساب عادی)'}
               </p>
             </div>
           </div>
@@ -184,7 +184,7 @@ export const ChunkUploadModal: React.FC<ChunkUploadModalProps> = ({
               <span className="text-[11px] text-slate-400">یا انتخاب فایل شبیه‌سازی تست:</span>
               <button
                 type="button"
-                onClick={() => handleSelectPreset('Telegram_Archive_1.8GB.zip', 1.8 * 1024 * 1024 * 1024)}
+                onClick={() => handleSelectPreset('GODFATHER_Archive_1.8GB.zip', 1.8 * 1024 * 1024 * 1024)}
                 className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-[11px] text-cyan-300 font-mono transition-colors cursor-pointer"
               >
                 1.8 GB (مجاز عادی)

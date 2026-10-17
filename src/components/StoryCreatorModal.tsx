@@ -67,7 +67,7 @@ export const StoryCreatorModal: React.FC<StoryCreatorModalProps> = ({
         <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-slate-700/60 bg-[#0f172a]/80 flex-shrink-0">
           <div className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-amber-400" />
-            <h3 className="font-extrabold text-white text-base">انتشار استوری در تلگرام</h3>
+            <h3 className="font-extrabold text-white text-base">انتشار استوری در GODFATHER SQUAD</h3>
           </div>
           <button 
             onClick={onClose} 
